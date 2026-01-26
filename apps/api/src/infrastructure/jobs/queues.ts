@@ -18,7 +18,7 @@ export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
 
 // Job types
 export interface NotificationJobData {
-  type: 'booking_confirmed' | 'booking_cancelled' | 'booking_reminder' | 'booking_rescheduled' | 'review_request' | 'promotion' | 'general';
+  type: 'booking_confirmed' | 'booking_cancelled' | 'booking_reminder' | 'booking_rescheduled' | 'review_request' | 'promotion' | 'payment_received' | 'waitlist_available' | 'general';
   userId: string;
   businessId?: string;
   appointmentId?: string;

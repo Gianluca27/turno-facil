@@ -20,6 +20,10 @@ import userRoutes from './presentation/routes/user.routes.js';
 import exploreRoutes from './presentation/routes/explore.routes.js';
 import businessPublicRoutes from './presentation/routes/businessPublic.routes.js';
 import bookingRoutes from './presentation/routes/booking.routes.js';
+import waitlistRoutes from './presentation/routes/waitlist.routes.js';
+import reviewsRoutes from './presentation/routes/reviews.routes.js';
+import promotionsRoutes from './presentation/routes/promotions.routes.js';
+import webhooksRoutes from './presentation/routes/webhooks.routes.js';
 import manageRoutes from './presentation/routes/manage/index.js';
 import healthRoutes from './presentation/routes/health.routes.js';
 
@@ -96,6 +100,12 @@ app.use(`${apiPrefix}/users`, userRoutes);
 app.use(`${apiPrefix}/explore`, exploreRoutes);
 app.use(`${apiPrefix}/businesses`, businessPublicRoutes);
 app.use(`${apiPrefix}/bookings`, bookingRoutes);
+app.use(`${apiPrefix}/waitlist`, waitlistRoutes);
+app.use(`${apiPrefix}/reviews`, reviewsRoutes);
+app.use(`${apiPrefix}/promotions`, promotionsRoutes);
+
+// Webhooks (no auth required, signature verified internally)
+app.use(`${apiPrefix}/webhooks`, webhooksRoutes);
 
 // Protected routes - Business App
 app.use(`${apiPrefix}/manage`, manageRoutes);
