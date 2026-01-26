@@ -3,7 +3,6 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { Review } from '../../../infrastructure/database/mongodb/models/Review.js';
 import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
-import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
 import { asyncHandler, NotFoundError, BadRequestError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../../domain/services/NotificationService.js';
@@ -79,7 +78,7 @@ router.get(
 
     const [reviews, total] = await Promise.all([
       Review.find(query)
-        .populate('userId', 'profile.firstName profile.lastName profile.avatar')
+        .populate('clientId', 'profile.firstName profile.lastName profile.avatar')
         .populate('staffId', 'profile.firstName profile.lastName')
         .populate('appointmentId', 'services date startTime')
         .sort({ [sortField]: sortOrder })
@@ -172,7 +171,7 @@ router.get(
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
     })
-      .populate('userId', 'profile.firstName profile.lastName profile.avatar email')
+      .populate('clientId', 'profile.firstName profile.lastName profile.avatar email')
       .populate('staffId', 'profile')
       .populate('appointmentId');
 
@@ -213,7 +212,7 @@ router.post(
 
     // Notify the user about the reply
     await notificationService.sendNotification({
-      userId: review.userId.toString(),
+      userId: review.clientId.toString(),
       type: 'general',
       channels: ['push', 'email'],
       businessId: req.currentBusiness!.businessId,
@@ -320,15 +319,15 @@ router.post(
       throw new NotFoundError('Review not found');
     }
 
-    if (review.reported) {
+    if (review.moderation.status === 'flagged') {
       throw new BadRequestError('Review has already been reported');
     }
 
-    review.reported = true;
-    review.reportReason = data.reason;
-    review.reportDetails = data.details;
-    review.reportedAt = new Date();
-    review.reportedBy = new mongoose.Types.ObjectId(req.user!.id);
+    review.moderation.status = 'flagged';
+    review.moderation.reason = `${data.reason}${data.details ? ': ' + data.details : ''}`;
+    review.moderation.reviewedAt = new Date();
+    review.moderation.reviewedBy = new mongoose.Types.ObjectId(req.user!.id);
+    review.reportCount = (review.reportCount || 0) + 1;
 
     await review.save();
 
@@ -510,6 +509,10 @@ router.post(
     }
 
     // Send review request notification
+    if (!appointment.clientId) {
+      throw new BadRequestError('Appointment has no associated client');
+    }
+
     await notificationService.sendNotification({
       userId: appointment.clientId.toString(),
       type: 'review_request',

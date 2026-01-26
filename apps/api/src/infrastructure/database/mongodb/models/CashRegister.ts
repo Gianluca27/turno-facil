@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 // Interfaces
 export interface ICashMovement {
-  _id: mongoose.Types.ObjectId;
+  _id?: mongoose.Types.ObjectId;
   type: 'in' | 'out';
   amount: number;
   reason: string;
@@ -182,7 +182,7 @@ const cashRegisterSchema = new Schema<ICashRegister, ICashRegisterModel>(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: (_doc, ret) => {
+      transform: (_doc, ret: Record<string, unknown>) => {
         delete ret.__v;
         return ret;
       },

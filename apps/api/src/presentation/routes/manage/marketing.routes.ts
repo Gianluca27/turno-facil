@@ -1,10 +1,9 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
-import { Promotion } from '../../../infrastructure/database/mongodb/models/Promotion.js';
+import { Promotion, IPromotion } from '../../../infrastructure/database/mongodb/models/Promotion.js';
 import { Campaign } from '../../../infrastructure/database/mongodb/models/Campaign.js';
 import { ClientBusinessRelation } from '../../../infrastructure/database/mongodb/models/ClientBusinessRelation.js';
-import { User } from '../../../infrastructure/database/mongodb/models/User.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
@@ -83,7 +82,7 @@ router.get(
     // Calculate usage stats
     const promotionsWithStats = promotions.map((p) => ({
       ...p,
-      usageRate: p.conditions?.maxUses ? Math.round((p.usageCount / p.conditions.maxUses) * 100) : null,
+      usageRate: p.limits?.totalUses ? Math.round(((p.limits.currentUses || 0) / p.limits.totalUses) * 100) : null,
       isActive: p.status === 'active' && new Date(p.validFrom) <= new Date() && new Date(p.validUntil) >= new Date(),
     }));
 

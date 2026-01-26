@@ -148,7 +148,7 @@ const notificationSchema = new Schema<INotification, INotificationModel>(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: (_doc, ret) => {
+      transform: (_doc, ret: Record<string, unknown>) => {
         delete ret.__v;
         return ret;
       },

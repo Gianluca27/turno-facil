@@ -41,10 +41,10 @@ class AuthService {
     };
 
     const options: SignOptions = {
-      expiresIn: config.jwt.accessExpiresIn as string,
+      expiresIn: config.jwt.accessExpiresIn,
       issuer: config.jwt.issuer,
       audience: config.jwt.audience,
-    };
+    } as SignOptions;
 
     return jwt.sign(payload, config.jwt.accessSecret, options);
   }
@@ -63,10 +63,10 @@ class AuthService {
     };
 
     const options: SignOptions = {
-      expiresIn: config.jwt.refreshExpiresIn as string,
+      expiresIn: config.jwt.refreshExpiresIn,
       issuer: config.jwt.issuer,
       audience: config.jwt.audience,
-    };
+    } as SignOptions;
 
     const token = jwt.sign(payload, config.jwt.refreshSecret, options);
 

@@ -5,7 +5,7 @@ import { Transaction } from '../../../infrastructure/database/mongodb/models/Tra
 import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
 import { Product } from '../../../infrastructure/database/mongodb/models/Product.js';
-import { Staff } from '../../../infrastructure/database/mongodb/models/Staff.js';
+// Staff is used in Transaction items but not directly imported here
 import { CashRegister } from '../../../infrastructure/database/mongodb/models/CashRegister.js';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
@@ -130,7 +130,7 @@ router.get(
       salesSummary.map((s) => [s._id, { total: s.total, count: s.count }])
     );
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         isOpen: true,
@@ -667,15 +667,10 @@ router.post(
     // Update appointment if linked
     if (data.appointmentId) {
       await Appointment.findByIdAndUpdate(data.appointmentId, {
-        paymentStatus: 'paid',
-        $push: {
-          transactions: {
-            transactionId: transaction._id,
-            type: 'payment',
-            amount: finalTotal,
-            date: new Date(),
-          },
-        },
+        'payment.status': 'paid',
+        'payment.paidAt': new Date(),
+        'payment.paidAmount': finalTotal,
+        'payment.transactionId': transaction._id.toString(),
       });
     }
 
@@ -935,17 +930,14 @@ router.post(
     await refundTransaction.save();
 
     // Process MercadoPago refund if applicable
+    // TODO: Implement MercadoPago refund when SDK method is available
     if (data.refundMethod === 'mercadopago' && sale.mercadoPagoPaymentId) {
-      try {
-        await mercadoPagoService.createRefund(sale.mercadoPagoPaymentId, refundAmount);
-      } catch (error) {
-        logger.error('MercadoPago refund failed', {
-          transactionId: sale._id,
-          paymentId: sale.mercadoPagoPaymentId,
-          error,
-        });
-        // Continue anyway - manual reconciliation may be needed
-      }
+      logger.warn('MercadoPago refund requested but automatic processing not yet implemented', {
+        transactionId: sale._id,
+        paymentId: sale.mercadoPagoPaymentId,
+        refundAmount,
+      });
+      // Manual reconciliation will be needed
     }
 
     logger.info('Refund processed', {
@@ -1050,7 +1042,7 @@ router.get(
       businessId,
       date: today,
       status: 'completed',
-      paymentStatus: { $in: ['pending', 'partial'] },
+      'payment.status': { $in: ['pending', 'partial'] },
     })
       .populate('clientId', 'profile.firstName profile.lastName')
       .populate('staffId', 'profile.firstName profile.lastName')
@@ -1077,7 +1069,7 @@ router.post(
       _id: req.params.id,
       businessId,
       status: 'completed',
-      paymentStatus: { $in: ['pending', 'partial'] },
+      'payment.status': { $in: ['pending', 'partial'] },
     });
 
     if (!appointment) {
@@ -1177,7 +1169,9 @@ router.post(
     await transaction.save();
 
     // Update appointment
-    appointment.paymentStatus = 'paid';
+    appointment.payment.status = 'paid';
+    appointment.payment.paidAt = new Date();
+    appointment.payment.paidAmount = finalTotal;
     appointment.pricing.tip = tipAmount;
     appointment.pricing.finalTotal = appointment.pricing.total + tipAmount;
     await appointment.save();

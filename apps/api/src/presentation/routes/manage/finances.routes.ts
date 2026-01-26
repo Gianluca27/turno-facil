@@ -3,10 +3,8 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { Transaction } from '../../../infrastructure/database/mongodb/models/Transaction.js';
 import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
-import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
 import { asyncHandler, NotFoundError, BadRequestError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { mercadoPagoService } from '../../../infrastructure/external/mercadopago/index.js';
 import { logger } from '../../../utils/logger.js';
 
 const router = Router();
@@ -437,7 +435,7 @@ router.put(
     // Only allow updating certain fields
     if (data.expenseCategory && transaction.type === 'expense') {
       if (!transaction.expense) {
-        transaction.expense = { category: data.expenseCategory };
+        transaction.expense = { category: data.expenseCategory, description: data.notes || '' };
       } else {
         transaction.expense.category = data.expenseCategory;
       }
