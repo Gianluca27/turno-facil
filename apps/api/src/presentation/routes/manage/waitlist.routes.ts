@@ -270,13 +270,18 @@ router.put(
       if (data.preferences.dateRange !== undefined) {
         entry.preferences.dateRange = data.preferences.dateRange
           ? {
-              start: new Date(data.preferences.dateRange.start),
-              end: new Date(data.preferences.dateRange.end),
+              from: new Date(data.preferences.dateRange.start),
+              to: new Date(data.preferences.dateRange.end),
             }
           : undefined;
       }
       if (data.preferences.timeRange !== undefined) {
-        entry.preferences.timeRange = data.preferences.timeRange || undefined;
+        entry.preferences.timeRange = data.preferences.timeRange
+          ? {
+              from: data.preferences.timeRange.start,
+              to: data.preferences.timeRange.end,
+            }
+          : undefined;
       }
       if (data.preferences.daysOfWeek !== undefined) {
         entry.preferences.daysOfWeek = data.preferences.daysOfWeek;
@@ -326,7 +331,7 @@ router.post(
       const services = entry.preferences.services as unknown as { name: string }[];
       await notificationService.sendNotification({
         userId: entry.clientId.toString(),
-        type: 'waitlist_available',
+        type: 'general', // Waitlist availability notification
         channels: ['push', 'email', 'sms'],
         businessId: req.currentBusiness!.businessId,
         data: {
@@ -342,12 +347,15 @@ router.post(
     if (!entry.notifications) {
       entry.notifications = [];
     }
-    entry.notifications.push({
-      appointmentId: appointmentId ? new mongoose.Types.ObjectId(appointmentId) : undefined,
-      sentAt: new Date(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours expiry
-      status: 'sent',
-    });
+    // Only add notification if there's an appointment ID
+    if (appointmentId) {
+      entry.notifications.push({
+        appointmentId: new mongoose.Types.ObjectId(appointmentId),
+        sentAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours expiry
+        status: 'sent',
+      });
+    }
 
     await entry.save();
 

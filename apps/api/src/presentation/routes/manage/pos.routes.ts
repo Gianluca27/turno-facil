@@ -9,7 +9,6 @@ import { Product } from '../../../infrastructure/database/mongodb/models/Product
 import { CashRegister } from '../../../infrastructure/database/mongodb/models/CashRegister.js';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { mercadoPagoService } from '../../../infrastructure/external/mercadopago/MercadoPagoService.js';
 import { logger } from '../../../utils/logger.js';
 
 const router = Router();

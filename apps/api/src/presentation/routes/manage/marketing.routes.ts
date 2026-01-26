@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
-import { Promotion, IPromotion } from '../../../infrastructure/database/mongodb/models/Promotion.js';
+import { Promotion } from '../../../infrastructure/database/mongodb/models/Promotion.js';
 import { Campaign } from '../../../infrastructure/database/mongodb/models/Campaign.js';
 import { ClientBusinessRelation } from '../../../infrastructure/database/mongodb/models/ClientBusinessRelation.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
@@ -247,12 +247,12 @@ router.post(
       throw new NotFoundError('Promotion not found');
     }
 
-    promotion.status = 'inactive';
+    promotion.status = 'paused';
     await promotion.save();
 
     res.json({
       success: true,
-      message: 'Promotion deactivated successfully',
+      message: 'Promotion paused successfully',
     });
   })
 );
@@ -271,9 +271,9 @@ router.delete(
       throw new NotFoundError('Promotion not found');
     }
 
-    if (promotion.usageCount > 0) {
+    if (promotion.limits.currentUses > 0) {
       // Soft delete if already used
-      promotion.status = 'inactive';
+      promotion.status = 'deleted';
       await promotion.save();
     } else {
       await promotion.deleteOne();
