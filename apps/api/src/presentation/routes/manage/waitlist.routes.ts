@@ -15,34 +15,40 @@ const router = Router();
 
 // Validation schemas
 const createWaitlistEntrySchema = z.object({
-  clientId: z.string().optional(),
-  clientInfo: z.object({
-    name: z.string().min(1).max(100),
-    phone: z.string().min(8).max(20),
-    email: z.string().email().optional(),
-  }).optional(),
-  serviceIds: z.array(z.string()).min(1),
-  preferredStaffId: z.string().optional(),
-  preferredDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-  preferredTimeRange: z.object({
-    start: z.string().regex(/^\d{2}:\d{2}$/),
-    end: z.string().regex(/^\d{2}:\d{2}$/),
-  }).optional(),
-  notes: z.string().max(500).optional(),
-  priority: z.enum(['normal', 'high', 'vip']).optional(),
+  clientId: z.string(),
+  preferences: z.object({
+    services: z.array(z.string()).min(1),
+    staffId: z.string().optional(),
+    dateRange: z.object({
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }).optional(),
+    timeRange: z.object({
+      start: z.string().regex(/^\d{2}:\d{2}$/),
+      end: z.string().regex(/^\d{2}:\d{2}$/),
+    }).optional(),
+    daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+  }),
+  priority: z.enum(['normal', 'vip']).optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
 const updateWaitlistEntrySchema = z.object({
-  preferredStaffId: z.string().optional().nullable(),
-  preferredDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-  preferredTimeRange: z.object({
-    start: z.string().regex(/^\d{2}:\d{2}$/),
-    end: z.string().regex(/^\d{2}:\d{2}$/),
-  }).optional().nullable(),
-  notes: z.string().max(500).optional(),
-  priority: z.enum(['normal', 'high', 'vip']).optional(),
-  status: z.enum(['waiting', 'contacted', 'booked', 'expired', 'cancelled']).optional(),
+  preferences: z.object({
+    services: z.array(z.string()).min(1).optional(),
+    staffId: z.string().optional().nullable(),
+    dateRange: z.object({
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }).optional().nullable(),
+    timeRange: z.object({
+      start: z.string().regex(/^\d{2}:\d{2}$/),
+      end: z.string().regex(/^\d{2}:\d{2}$/),
+    }).optional().nullable(),
+    daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+  }).optional(),
+  priority: z.enum(['normal', 'vip']).optional(),
+  status: z.enum(['active', 'fulfilled', 'cancelled', 'expired']).optional(),
 });
 
 // GET /api/v1/manage/waitlist - Get waitlist entries
@@ -52,7 +58,7 @@ router.get(
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const businessId = req.currentBusiness!.businessId;
     const {
-      status = 'waiting',
+      status = 'active',
       serviceId,
       staffId,
       priority,
@@ -71,11 +77,11 @@ router.get(
     }
 
     if (serviceId) {
-      query.serviceIds = serviceId;
+      query['preferences.services'] = serviceId;
     }
 
     if (staffId) {
-      query.preferredStaffId = staffId;
+      query['preferences.staffId'] = staffId;
     }
 
     if (priority) {
@@ -85,8 +91,8 @@ router.get(
     const [entries, total] = await Promise.all([
       Waitlist.find(query)
         .populate('clientId', 'profile.firstName profile.lastName email phone')
-        .populate('serviceIds', 'name duration price')
-        .populate('preferredStaffId', 'profile.firstName profile.lastName')
+        .populate('preferences.services', 'name duration price')
+        .populate('preferences.staffId', 'profile.firstName profile.lastName')
         .sort({ priority: -1, createdAt: 1 })
         .skip(skip)
         .limit(limitNum)
@@ -112,9 +118,8 @@ router.get(
       data: {
         entries,
         stats: {
-          waiting: statsMap.waiting || 0,
-          contacted: statsMap.contacted || 0,
-          booked: statsMap.booked || 0,
+          active: statsMap.active || 0,
+          fulfilled: statsMap.fulfilled || 0,
           expired: statsMap.expired || 0,
           cancelled: statsMap.cancelled || 0,
         },
@@ -138,38 +143,26 @@ router.post(
     const businessId = req.currentBusiness!.businessId;
 
     // Validate client
-    let clientInfo = data.clientInfo;
-    if (data.clientId) {
-      const user = await User.findById(data.clientId).select('profile email phone');
-      if (!user) {
-        throw new NotFoundError('Client not found');
-      }
-      clientInfo = {
-        name: `${user.profile.firstName} ${user.profile.lastName}`,
-        phone: user.phone || '',
-        email: user.email,
-      };
-    }
-
-    if (!clientInfo) {
-      throw new BadRequestError('Client information is required');
+    const user = await User.findById(data.clientId).select('profile email phone');
+    if (!user) {
+      throw new NotFoundError('Client not found');
     }
 
     // Validate services
     const services = await Service.find({
-      _id: { $in: data.serviceIds },
+      _id: { $in: data.preferences.services },
       businessId,
       status: 'active',
     });
 
-    if (services.length !== data.serviceIds.length) {
+    if (services.length !== data.preferences.services.length) {
       throw new BadRequestError('One or more services not found');
     }
 
     // Validate staff if provided
-    if (data.preferredStaffId) {
+    if (data.preferences.staffId) {
       const staff = await Staff.findOne({
-        _id: data.preferredStaffId,
+        _id: data.preferences.staffId,
         businessId,
         status: 'active',
       });
@@ -179,36 +172,31 @@ router.post(
     }
 
     // Check for existing waitlist entry
-    if (data.clientId) {
-      const existingEntry = await Waitlist.findOne({
-        businessId,
-        clientId: data.clientId,
-        status: 'waiting',
-        serviceIds: { $in: data.serviceIds },
-      });
+    const existingEntry = await Waitlist.findOne({
+      businessId,
+      clientId: data.clientId,
+      status: 'active',
+      'preferences.services': { $in: data.preferences.services },
+    });
 
-      if (existingEntry) {
-        throw new ConflictError('Client already has a waitlist entry for this service');
-      }
+    if (existingEntry) {
+      throw new ConflictError('Client already has a waitlist entry for this service');
     }
-
-    // Calculate total duration
-    const totalDuration = services.reduce((sum, s) => sum + s.duration, 0);
 
     const waitlistEntry = new Waitlist({
       businessId,
       clientId: data.clientId,
-      clientInfo,
-      serviceIds: data.serviceIds,
-      totalDuration,
-      preferredStaffId: data.preferredStaffId,
-      preferredDates: data.preferredDates?.map((d) => new Date(d)),
-      preferredTimeRange: data.preferredTimeRange,
-      notes: data.notes,
+      preferences: {
+        services: data.preferences.services,
+        staffId: data.preferences.staffId,
+        dateRange: data.preferences.dateRange,
+        timeRange: data.preferences.timeRange,
+        daysOfWeek: data.preferences.daysOfWeek,
+      },
       priority: data.priority || 'normal',
-      status: 'waiting',
+      status: 'active',
+      notifications: [],
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
-      createdBy: req.user!.id,
     });
 
     await waitlistEntry.save();
@@ -216,7 +204,7 @@ router.post(
     logger.info('Waitlist entry created', {
       waitlistId: waitlistEntry._id,
       businessId,
-      clientInfo: clientInfo.name,
+      clientId: data.clientId,
     });
 
     res.status(201).json({
@@ -237,8 +225,8 @@ router.get(
       businessId: req.currentBusiness!.businessId,
     })
       .populate('clientId', 'profile email phone')
-      .populate('serviceIds', 'name duration price category')
-      .populate('preferredStaffId', 'profile');
+      .populate('preferences.services', 'name duration price category')
+      .populate('preferences.staffId', 'profile');
 
     if (!entry) {
       throw new NotFoundError('Waitlist entry not found');
@@ -267,29 +255,38 @@ router.put(
       throw new NotFoundError('Waitlist entry not found');
     }
 
-    // Update fields
-    if (data.preferredStaffId !== undefined) {
-      entry.preferredStaffId = data.preferredStaffId
-        ? new mongoose.Types.ObjectId(data.preferredStaffId)
-        : undefined;
-    }
-    if (data.preferredDates) {
-      entry.preferredDates = data.preferredDates.map((d) => new Date(d));
-    }
-    if (data.preferredTimeRange !== undefined) {
-      entry.preferredTimeRange = data.preferredTimeRange || undefined;
-    }
-    if (data.notes !== undefined) {
-      entry.notes = data.notes;
+    // Update preferences fields
+    if (data.preferences) {
+      if (data.preferences.services) {
+        entry.preferences.services = data.preferences.services.map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+      }
+      if (data.preferences.staffId !== undefined) {
+        entry.preferences.staffId = data.preferences.staffId
+          ? new mongoose.Types.ObjectId(data.preferences.staffId)
+          : undefined;
+      }
+      if (data.preferences.dateRange !== undefined) {
+        entry.preferences.dateRange = data.preferences.dateRange
+          ? {
+              start: new Date(data.preferences.dateRange.start),
+              end: new Date(data.preferences.dateRange.end),
+            }
+          : undefined;
+      }
+      if (data.preferences.timeRange !== undefined) {
+        entry.preferences.timeRange = data.preferences.timeRange || undefined;
+      }
+      if (data.preferences.daysOfWeek !== undefined) {
+        entry.preferences.daysOfWeek = data.preferences.daysOfWeek;
+      }
     }
     if (data.priority) {
       entry.priority = data.priority;
     }
     if (data.status) {
       entry.status = data.status;
-      if (data.status === 'contacted') {
-        entry.contactedAt = new Date();
-      }
     }
 
     await entry.save();
@@ -312,13 +309,13 @@ router.post(
   '/:id/notify',
   requirePermission('waitlist:write'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const { message, availableSlots } = req.body;
+    const { appointmentId, availableSlots } = req.body;
 
     const entry = await Waitlist.findOne({
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
-      status: { $in: ['waiting', 'contacted'] },
-    }).populate('serviceIds', 'name');
+      status: 'active',
+    }).populate('preferences.services', 'name');
 
     if (!entry) {
       throw new NotFoundError('Waitlist entry not found');
@@ -326,6 +323,7 @@ router.post(
 
     // Send notification
     if (entry.clientId) {
+      const services = entry.preferences.services as unknown as { name: string }[];
       await notificationService.sendNotification({
         userId: entry.clientId.toString(),
         type: 'waitlist_available',
@@ -333,23 +331,22 @@ router.post(
         businessId: req.currentBusiness!.businessId,
         data: {
           title: '¡Hay disponibilidad!',
-          body: message || `Hay un turno disponible para ${(entry.serviceIds as unknown as { name: string }[])[0]?.name || 'tu servicio'}`,
+          body: `Hay un turno disponible para ${services[0]?.name || 'tu servicio'}`,
           availableSlots,
           waitlistId: entry._id.toString(),
         },
       });
     }
 
-    // Update status
-    entry.status = 'contacted';
-    entry.contactedAt = new Date();
+    // Add notification record
     if (!entry.notifications) {
       entry.notifications = [];
     }
     entry.notifications.push({
+      appointmentId: appointmentId ? new mongoose.Types.ObjectId(appointmentId) : undefined,
       sentAt: new Date(),
-      message: message || 'Availability notification',
-      channels: ['push', 'email', 'sms'],
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours expiry
+      status: 'sent',
     });
 
     await entry.save();
@@ -380,15 +377,15 @@ router.post(
     const entry = await Waitlist.findOne({
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
-      status: { $in: ['waiting', 'contacted'] },
-    }).populate('serviceIds');
+      status: 'active',
+    }).populate('preferences.services');
 
     if (!entry) {
       throw new NotFoundError('Waitlist entry not found');
     }
 
     const businessId = req.currentBusiness!.businessId;
-    const services = entry.serviceIds as unknown as Array<{
+    const services = entry.preferences.services as unknown as Array<{
       _id: mongoose.Types.ObjectId;
       name: string;
       duration: number;
@@ -423,11 +420,18 @@ router.post(
     // Get staff info
     const staff = await Staff.findById(staffId).select('profile');
 
+    // Get client info for appointment
+    const client = await User.findById(entry.clientId).select('profile email phone');
+
     // Create appointment
     const appointment = new Appointment({
       businessId,
       clientId: entry.clientId,
-      clientInfo: entry.clientInfo,
+      clientInfo: client ? {
+        name: `${client.profile.firstName} ${client.profile.lastName}`,
+        phone: client.phone || '',
+        email: client.email,
+      } : undefined,
       staffId,
       staffInfo: {
         name: staff ? `${staff.profile.firstName} ${staff.profile.lastName}` : 'Staff',
@@ -458,16 +462,24 @@ router.post(
       source: 'waitlist',
       notes: {
         internal: `Converted from waitlist #${entry._id}`,
-        client: entry.notes,
       },
       createdBy: new mongoose.Types.ObjectId(req.user!.id),
     });
 
     await appointment.save();
 
-    // Update waitlist entry
-    entry.status = 'booked';
-    entry.convertedAppointmentId = appointment._id;
+    // Update waitlist entry status to fulfilled
+    entry.status = 'fulfilled';
+    // Add a notification record for the fulfilled appointment
+    if (!entry.notifications) {
+      entry.notifications = [];
+    }
+    entry.notifications.push({
+      appointmentId: appointment._id,
+      sentAt: new Date(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      status: 'accepted',
+    });
     await entry.save();
 
     // Send confirmation notification

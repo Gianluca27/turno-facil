@@ -1,5 +1,10 @@
 import { Router, Response } from 'express';
-import { authenticateBusinessUser, setBusinessContext, requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
+import {
+  authenticateBusinessUser,
+  setBusinessContext,
+  requirePermission,
+  BusinessAuthenticatedRequest,
+} from '../../middleware/auth.js';
 import { asyncHandler, NotFoundError } from '../../middleware/errorHandler.js';
 import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
 
@@ -10,6 +15,12 @@ import servicesRoutes from './services.routes.js';
 import staffRoutes from './staff.routes.js';
 import clientsRoutes from './clients.routes.js';
 import settingsRoutes from './settings.routes.js';
+import financesRoutes from './finances.routes.js';
+import marketingRoutes from './marketing.routes.js';
+import analyticsRoutes from './analytics.routes.js';
+import waitlistRoutes from './waitlist.routes.js';
+import posRoutes from './pos.routes.js';
+import reviewsRoutes from './reviews.routes.js';
 
 const router = Router();
 
@@ -48,30 +59,11 @@ router.use('/services', servicesRoutes);
 router.use('/staff', staffRoutes);
 router.use('/clients', clientsRoutes);
 router.use('/settings', settingsRoutes);
-
-// Placeholder routes for features to be implemented
-router.use('/finances', (_req, res) => {
-  res.json({ success: true, message: 'Finances routes - Coming soon' });
-});
-
-router.use('/marketing', (_req, res) => {
-  res.json({ success: true, message: 'Marketing routes - Coming soon' });
-});
-
-router.use('/analytics', (_req, res) => {
-  res.json({ success: true, message: 'Analytics routes - Coming soon' });
-});
-
-router.use('/waitlist', (_req, res) => {
-  res.json({ success: true, message: 'Waitlist routes - Coming soon' });
-});
-
-router.use('/pos', (_req, res) => {
-  res.json({ success: true, message: 'POS routes - Coming soon' });
-});
-
-router.use('/reviews', (_req, res) => {
-  res.json({ success: true, message: 'Reviews routes - Coming soon' });
-});
+router.use('/finances', financesRoutes);
+router.use('/marketing', marketingRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/waitlist', waitlistRoutes);
+router.use('/pos', posRoutes);
+router.use('/reviews', reviewsRoutes);
 
 export default router;
