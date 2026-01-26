@@ -1,4 +1,4 @@
-import { MercadoPagoConfig, Payment, Preference, PreApproval, PreApprovalPlan } from 'mercadopago';
+import { MercadoPagoConfig, Payment, Preference, PreApproval, PreApprovalPlan, PaymentRefund } from 'mercadopago';
 import config from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
 import crypto from 'crypto';
@@ -125,6 +125,7 @@ export interface WebhookPayload {
 class MercadoPagoService {
   private client: MercadoPagoConfig | null = null;
   private payment: Payment | null = null;
+  private paymentRefund: PaymentRefund | null = null;
   private preference: Preference | null = null;
   private preApproval: PreApproval | null = null;
   private preApprovalPlan: PreApprovalPlan | null = null;
@@ -147,6 +148,7 @@ class MercadoPagoService {
       });
 
       this.payment = new Payment(this.client);
+      this.paymentRefund = new PaymentRefund(this.client);
       this.preference = new Preference(this.client);
       this.preApproval = new PreApproval(this.client);
       this.preApprovalPlan = new PreApprovalPlan(this.client);
@@ -214,7 +216,8 @@ class MercadoPagoService {
 
     try {
       const preferenceData = {
-        items: params.items.map((item) => ({
+        items: params.items.map((item, index) => ({
+          id: `item_${index}_${Date.now()}`,
           title: item.title,
           description: item.description,
           quantity: item.quantity,
@@ -288,8 +291,8 @@ class MercadoPagoService {
     try {
       const refundData = params.amount ? { amount: params.amount } : {};
 
-      const response = await this.payment!.refund({
-        id: params.paymentId,
+      const response = await this.paymentRefund!.create({
+        payment_id: params.paymentId,
         body: refundData,
       });
 

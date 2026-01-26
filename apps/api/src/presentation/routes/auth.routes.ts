@@ -9,7 +9,6 @@ import { User } from '../../infrastructure/database/mongodb/models/User.js';
 import { twilioService } from '../../infrastructure/external/twilio/index.js';
 import { sendGridService } from '../../infrastructure/external/sendgrid/index.js';
 import { googleService } from '../../infrastructure/external/google/index.js';
-import { firebaseService } from '../../infrastructure/external/firebase/index.js';
 import { logger } from '../../utils/logger.js';
 import config from '../../config/index.js';
 
@@ -498,7 +497,7 @@ router.post(
       `,
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Verification email sent',
     });

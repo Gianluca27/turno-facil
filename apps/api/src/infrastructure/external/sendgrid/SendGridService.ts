@@ -31,6 +31,7 @@ export interface BookingConfirmedData {
   address: string;
   price: string;
   bookingId: string;
+  [key: string]: unknown;
 }
 
 export interface BookingCancelledData {
@@ -40,6 +41,7 @@ export interface BookingCancelledData {
   date: string;
   time: string;
   reason?: string;
+  [key: string]: unknown;
 }
 
 export interface ReminderData {
@@ -50,18 +52,21 @@ export interface ReminderData {
   time: string;
   address: string;
   mapsUrl: string;
+  [key: string]: unknown;
 }
 
 export interface PasswordResetData {
   userName: string;
   resetLink: string;
   expiresIn: string;
+  [key: string]: unknown;
 }
 
 export interface WelcomeData {
   userName: string;
   appStoreUrl?: string;
   playStoreUrl?: string;
+  [key: string]: unknown;
 }
 
 export interface ReviewRequestData {
@@ -69,6 +74,7 @@ export interface ReviewRequestData {
   businessName: string;
   serviceName: string;
   reviewLink: string;
+  [key: string]: unknown;
 }
 
 class SendGridService {

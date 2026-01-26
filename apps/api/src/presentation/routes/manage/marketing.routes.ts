@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
 import { Promotion } from '../../../infrastructure/database/mongodb/models/Promotion.js';
 import { Campaign } from '../../../infrastructure/database/mongodb/models/Campaign.js';
 import { ClientBusinessRelation } from '../../../infrastructure/database/mongodb/models/ClientBusinessRelation.js';
-import { User } from '../../../infrastructure/database/mongodb/models/User.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
 import { asyncHandler, NotFoundError, BadRequestError, ConflictError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
@@ -72,7 +71,7 @@ router.get(
 
     const [promotions, total] = await Promise.all([
       Promotion.find(query)
-        .populate('applicableServices', 'name')
+        .populate('conditions.services', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -83,7 +82,7 @@ router.get(
     // Calculate usage stats
     const promotionsWithStats = promotions.map((p) => ({
       ...p,
-      usageRate: p.maxUses ? Math.round((p.currentUses / p.maxUses) * 100) : null,
+      usageRate: p.limits?.totalUses ? Math.round(((p.limits.currentUses || 0) / p.limits.totalUses) * 100) : null,
       isActive: p.status === 'active' && new Date(p.validFrom) <= new Date() && new Date(p.validUntil) >= new Date(),
     }));
 
@@ -144,20 +143,18 @@ router.post(
       businessId,
       name: data.name,
       code: data.code,
-      description: data.description,
-      discountType: data.discountType,
-      discountValue: data.discountValue,
-      maxDiscountAmount: data.maxDiscountAmount,
-      minPurchaseAmount: data.minPurchaseAmount,
+      type: data.discountType,
+      value: data.discountValue,
       validFrom,
       validUntil,
-      maxUses: data.maxUses,
-      usagePerUser: data.usagePerUser,
-      applicableServices: data.applicableServices,
-      terms: data.terms,
+      conditions: {
+        minPurchase: data.minPurchaseAmount,
+        maxUses: data.maxUses,
+        maxUsesPerClient: data.usagePerUser,
+        services: data.applicableServices,
+      },
       status: 'active',
-      currentUses: 0,
-      createdBy: req.user!.id,
+      usageCount: 0,
     });
 
     await promotion.save();
@@ -185,8 +182,7 @@ router.get(
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
     })
-      .populate('applicableServices', 'name price')
-      .populate('usedBy.userId', 'profile.firstName profile.lastName email');
+      .populate('conditions.services', 'name price');
 
     if (!promotion) {
       throw new NotFoundError('Promotion not found');
@@ -251,12 +247,12 @@ router.post(
       throw new NotFoundError('Promotion not found');
     }
 
-    promotion.status = 'inactive';
+    promotion.status = 'paused';
     await promotion.save();
 
     res.json({
       success: true,
-      message: 'Promotion deactivated successfully',
+      message: 'Promotion paused successfully',
     });
   })
 );
@@ -275,7 +271,7 @@ router.delete(
       throw new NotFoundError('Promotion not found');
     }
 
-    if (promotion.currentUses > 0) {
+    if (promotion.limits.currentUses > 0) {
       // Soft delete if already used
       promotion.status = 'deleted';
       await promotion.save();
@@ -321,7 +317,6 @@ router.get(
 
     const [campaigns, total] = await Promise.all([
       Campaign.find(query)
-        .populate('promotionId', 'name code')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -360,25 +355,44 @@ router.post(
       throw new BadRequestError('No clients match the selected criteria');
     }
 
+    // Map targetAudience to audience structure
+    const audienceType = data.targetAudience === 'all' ? 'all' :
+                         data.targetAudience === 'custom' ? 'custom' : 'segment';
+    const audienceSegment = ['new', 'returning', 'inactive'].includes(data.targetAudience)
+                            ? data.targetAudience as 'new' | 'returning' | 'inactive'
+                            : undefined;
+
     const campaign = new Campaign({
       businessId,
       name: data.name,
       type: data.type,
-      subject: data.subject,
-      content: data.content,
-      targetAudience: data.targetAudience,
-      customFilters: data.customFilters,
-      scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : null,
-      promotionId: data.promotionId,
+      content: {
+        title: data.subject || data.name,
+        body: data.content,
+      },
+      audience: {
+        type: audienceType,
+        segment: audienceSegment,
+        customFilters: data.customFilters ? {
+          lastVisitDaysAgo: data.customFilters.lastVisitDays,
+          totalVisits: data.customFilters.minBookings,
+          totalSpent: data.customFilters.minSpent,
+          services: data.customFilters.services,
+        } : undefined,
+      },
+      schedule: {
+        type: data.scheduledFor ? 'scheduled' : 'immediate',
+        sendAt: data.scheduledFor ? new Date(data.scheduledFor) : undefined,
+      },
       status: data.scheduledFor ? 'scheduled' : 'draft',
       stats: {
-        targetCount: audienceCount,
-        sentCount: 0,
-        deliveredCount: 0,
-        openedCount: 0,
-        clickedCount: 0,
+        totalRecipients: audienceCount,
+        sent: 0,
+        delivered: 0,
+        opened: 0,
+        clicked: 0,
+        failed: 0,
       },
-      createdBy: req.user!.id,
     });
 
     await campaign.save();
@@ -409,7 +423,7 @@ router.get(
     const campaign = await Campaign.findOne({
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
-    }).populate('promotionId', 'name code discountType discountValue');
+    });
 
     if (!campaign) {
       throw new NotFoundError('Campaign not found');
@@ -439,11 +453,19 @@ router.post(
 
     const businessId = req.currentBusiness!.businessId;
 
-    // Get target audience
+    // Get target audience - convert customFilters to expected format
+    const customFiltersConverted = campaign.audience?.customFilters ? {
+      lastVisitDaysAgo: campaign.audience.customFilters.lastVisitDaysAgo?.min,
+      totalVisits: campaign.audience.customFilters.totalVisits?.min,
+      totalSpent: campaign.audience.customFilters.totalSpent?.min,
+      services: campaign.audience.customFilters.services?.map(s => s.toString()),
+      staff: campaign.audience.customFilters.staff?.map(s => s.toString()),
+    } : undefined;
+
     const audienceQuery = await buildAudienceQuery(
       businessId,
-      campaign.targetAudience,
-      campaign.customFilters
+      campaign.audience?.type === 'segment' ? campaign.audience?.segment : campaign.audience?.type,
+      customFiltersConverted
     );
 
     const clients = await ClientBusinessRelation.find(audienceQuery)
@@ -457,7 +479,7 @@ router.post(
     // Update campaign status
     campaign.status = 'sending';
     campaign.sentAt = new Date();
-    campaign.stats.targetCount = clients.length;
+    campaign.stats.totalRecipients = clients.length;
     await campaign.save();
 
     // Queue messages based on campaign type
@@ -480,8 +502,8 @@ router.post(
             if (user.email) {
               await addJob<EmailJobData>(QUEUE_NAMES.EMAILS, {
                 to: user.email,
-                subject: campaign.subject || campaign.name,
-                html: campaign.content.replace('{{nombre}}', user.profile?.firstName || 'Cliente'),
+                subject: campaign.content?.title || campaign.name,
+                html: (campaign.content?.htmlTemplate || campaign.content?.body || '').replace('{{nombre}}', user.profile?.firstName || 'Cliente'),
               });
               sentCount++;
             }
@@ -495,8 +517,8 @@ router.post(
                 channels: ['push'],
                 businessId,
                 data: {
-                  title: campaign.name,
-                  body: campaign.content.substring(0, 200),
+                  title: campaign.content?.title || campaign.name,
+                  body: (campaign.content?.body || '').substring(0, 200),
                   campaignId: campaign._id.toString(),
                 },
               });
@@ -508,7 +530,7 @@ router.post(
             if (user.phone) {
               await addJob(QUEUE_NAMES.SMS, {
                 to: user.phone,
-                body: campaign.content.replace('{{nombre}}', user.profile?.firstName || '').substring(0, 160),
+                body: (campaign.content?.body || '').replace('{{nombre}}', user.profile?.firstName || '').substring(0, 160),
               });
               sentCount++;
             }
@@ -525,7 +547,7 @@ router.post(
 
     // Update final stats
     campaign.status = 'sent';
-    campaign.stats.sentCount = sentCount;
+    campaign.stats.sent = sentCount;
     await campaign.save();
 
     logger.info('Campaign sent', {
@@ -616,14 +638,17 @@ router.post(
       success: true,
       data: {
         count,
-        sample: sample.map((c) => ({
-          name: c.clientId?.profile
-            ? `${c.clientId.profile.firstName} ${c.clientId.profile.lastName}`
-            : 'Cliente',
-          email: c.clientId?.email,
-          totalBookings: c.totalBookings,
-          totalSpent: c.totalSpent,
-        })),
+        sample: sample.map((c) => {
+          const client = c.clientId as unknown as { profile?: { firstName?: string; lastName?: string }; email?: string } | null;
+          return {
+            name: client?.profile
+              ? `${client.profile.firstName || ''} ${client.profile.lastName || ''}`.trim() || 'Cliente'
+              : 'Cliente',
+            email: client?.email,
+            totalBookings: c.stats.totalVisits,
+            totalSpent: c.stats.totalSpent,
+          };
+        }),
       },
     });
   })
@@ -632,13 +657,13 @@ router.post(
 // Helper function to build audience query
 async function buildAudienceQuery(
   businessId: string,
-  targetAudience: string,
+  targetAudience: string | undefined,
   customFilters?: {
-    minBookings?: number;
-    maxBookings?: number;
-    minSpent?: number;
-    lastVisitDays?: number;
+    lastVisitDaysAgo?: number;
+    totalVisits?: number;
+    totalSpent?: number;
     services?: string[];
+    staff?: string[];
   }
 ): Promise<Record<string, unknown>> {
   const query: Record<string, unknown> = {
@@ -666,17 +691,14 @@ async function buildAudienceQuery(
 
     case 'custom':
       if (customFilters) {
-        if (customFilters.minBookings !== undefined) {
-          query.totalBookings = { ...query.totalBookings as object, $gte: customFilters.minBookings };
+        if (customFilters.totalVisits !== undefined) {
+          query.totalBookings = { ...query.totalBookings as object, $gte: customFilters.totalVisits };
         }
-        if (customFilters.maxBookings !== undefined) {
-          query.totalBookings = { ...query.totalBookings as object, $lte: customFilters.maxBookings };
+        if (customFilters.totalSpent !== undefined) {
+          query.totalSpent = { $gte: customFilters.totalSpent };
         }
-        if (customFilters.minSpent !== undefined) {
-          query.totalSpent = { $gte: customFilters.minSpent };
-        }
-        if (customFilters.lastVisitDays !== undefined) {
-          const lastVisitDate = new Date(now.getTime() - customFilters.lastVisitDays * 24 * 60 * 60 * 1000);
+        if (customFilters.lastVisitDaysAgo !== undefined) {
+          const lastVisitDate = new Date(now.getTime() - customFilters.lastVisitDaysAgo * 24 * 60 * 60 * 1000);
           query.lastVisitAt = { $gte: lastVisitDate };
         }
       }

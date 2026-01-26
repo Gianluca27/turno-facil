@@ -3,7 +3,6 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { Review } from '../../../infrastructure/database/mongodb/models/Review.js';
 import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
-import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
 import { asyncHandler, NotFoundError, BadRequestError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../../domain/services/NotificationService.js';
@@ -48,15 +47,15 @@ router.get(
     };
 
     if (rating) {
-      query.rating = parseInt(rating, 10);
+      query['ratings.overall'] = parseInt(rating, 10);
     }
 
     if (hasReply === 'true') {
-      query['reply.text'] = { $exists: true, $ne: '' };
+      query['response.text'] = { $exists: true, $ne: '' };
     } else if (hasReply === 'false') {
       query.$or = [
-        { 'reply.text': { $exists: false } },
-        { 'reply.text': '' },
+        { 'response.text': { $exists: false } },
+        { 'response.text': '' },
       ];
     }
 
@@ -79,7 +78,7 @@ router.get(
 
     const [reviews, total] = await Promise.all([
       Review.find(query)
-        .populate('userId', 'profile.firstName profile.lastName profile.avatar')
+        .populate('clientId', 'profile.firstName profile.lastName profile.avatar')
         .populate('staffId', 'profile.firstName profile.lastName')
         .populate('appointmentId', 'services date startTime')
         .sort({ [sortField]: sortOrder })
@@ -101,13 +100,13 @@ router.get(
         $group: {
           _id: null,
           totalReviews: { $sum: 1 },
-          avgRating: { $avg: '$rating' },
-          rating5: { $sum: { $cond: [{ $eq: ['$rating', 5] }, 1, 0] } },
-          rating4: { $sum: { $cond: [{ $eq: ['$rating', 4] }, 1, 0] } },
-          rating3: { $sum: { $cond: [{ $eq: ['$rating', 3] }, 1, 0] } },
-          rating2: { $sum: { $cond: [{ $eq: ['$rating', 2] }, 1, 0] } },
-          rating1: { $sum: { $cond: [{ $eq: ['$rating', 1] }, 1, 0] } },
-          withReply: { $sum: { $cond: [{ $and: [{ $ne: ['$reply.text', null] }, { $ne: ['$reply.text', ''] }] }, 1, 0] } },
+          avgRating: { $avg: '$ratings.overall' },
+          rating5: { $sum: { $cond: [{ $eq: ['$ratings.overall', 5] }, 1, 0] } },
+          rating4: { $sum: { $cond: [{ $eq: ['$ratings.overall', 4] }, 1, 0] } },
+          rating3: { $sum: { $cond: [{ $eq: ['$ratings.overall', 3] }, 1, 0] } },
+          rating2: { $sum: { $cond: [{ $eq: ['$ratings.overall', 2] }, 1, 0] } },
+          rating1: { $sum: { $cond: [{ $eq: ['$ratings.overall', 1] }, 1, 0] } },
+          withReply: { $sum: { $cond: [{ $and: [{ $ne: ['$response.text', null] }, { $ne: ['$response.text', ''] }] }, 1, 0] } },
         },
       },
     ]);
@@ -128,8 +127,8 @@ router.get(
       businessId,
       status: 'published',
       $or: [
-        { 'reply.text': { $exists: false } },
-        { 'reply.text': '' },
+        { 'response.text': { $exists: false } },
+        { 'response.text': '' },
       ],
     });
 
@@ -172,7 +171,7 @@ router.get(
       _id: req.params.id,
       businessId: req.currentBusiness!.businessId,
     })
-      .populate('userId', 'profile.firstName profile.lastName profile.avatar email')
+      .populate('clientId', 'profile.firstName profile.lastName profile.avatar email')
       .populate('staffId', 'profile')
       .populate('appointmentId');
 
@@ -203,17 +202,17 @@ router.post(
       throw new NotFoundError('Review not found');
     }
 
-    review.reply = {
+    review.response = {
       text: data.text,
-      repliedAt: new Date(),
-      repliedBy: new mongoose.Types.ObjectId(req.user!.id),
+      respondedAt: new Date(),
+      respondedBy: new mongoose.Types.ObjectId(req.user!.id),
     };
 
     await review.save();
 
     // Notify the user about the reply
     await notificationService.sendNotification({
-      userId: review.userId.toString(),
+      userId: review.clientId.toString(),
       type: 'general',
       channels: ['push', 'email'],
       businessId: req.currentBusiness!.businessId,
@@ -253,12 +252,12 @@ router.put(
       throw new NotFoundError('Review not found');
     }
 
-    if (!review.reply?.text) {
+    if (!review.response?.text) {
       throw new BadRequestError('No reply to update');
     }
 
-    review.reply.text = data.text;
-    review.reply.editedAt = new Date();
+    review.response.text = data.text;
+    review.response.respondedAt = new Date();
 
     await review.save();
 
@@ -289,7 +288,7 @@ router.delete(
       throw new NotFoundError('Review not found');
     }
 
-    review.reply = undefined;
+    review.response = undefined;
     await review.save();
 
     logger.info('Review reply deleted', {
@@ -320,15 +319,15 @@ router.post(
       throw new NotFoundError('Review not found');
     }
 
-    if (review.reported) {
+    if (review.moderation.status === 'flagged') {
       throw new BadRequestError('Review has already been reported');
     }
 
-    review.reported = true;
-    review.reportReason = data.reason;
-    review.reportDetails = data.details;
-    review.reportedAt = new Date();
-    review.reportedBy = new mongoose.Types.ObjectId(req.user!.id);
+    review.moderation.status = 'flagged';
+    review.moderation.reason = `${data.reason}${data.details ? ': ' + data.details : ''}`;
+    review.moderation.reviewedAt = new Date();
+    review.moderation.reviewedBy = new mongoose.Types.ObjectId(req.user!.id);
+    review.reportCount = (review.reportCount || 0) + 1;
 
     await review.save();
 
@@ -373,7 +372,7 @@ router.get(
             month: { $month: '$createdAt' },
           },
           count: { $sum: 1 },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$ratings.overall' },
         },
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
@@ -392,7 +391,7 @@ router.get(
         $group: {
           _id: '$staffId',
           count: { $sum: 1 },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$ratings.overall' },
         },
       },
       {
@@ -426,7 +425,7 @@ router.get(
       businessId,
       status: 'published',
     })
-      .select('text rating')
+      .select('content.text ratings.overall')
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();
@@ -439,13 +438,13 @@ router.get(
       'malo', 'lento', 'caro', 'sucio', 'impuntual', 'espera'];
 
     recentReviews.forEach((review) => {
-      if (!review.text) return;
-      const text = review.text.toLowerCase();
+      if (!review.content?.text) return;
+      const text = review.content.text.toLowerCase();
       keywords.forEach((keyword) => {
         if (text.includes(keyword)) {
-          if (review.rating >= 4) {
+          if (review.ratings?.overall >= 4) {
             positiveKeywords[keyword] = (positiveKeywords[keyword] || 0) + 1;
-          } else if (review.rating <= 2) {
+          } else if (review.ratings?.overall <= 2) {
             negativeKeywords[keyword] = (negativeKeywords[keyword] || 0) + 1;
           }
         }
@@ -510,6 +509,10 @@ router.post(
     }
 
     // Send review request notification
+    if (!appointment.clientId) {
+      throw new BadRequestError('Appointment has no associated client');
+    }
+
     await notificationService.sendNotification({
       userId: appointment.clientId.toString(),
       type: 'review_request',

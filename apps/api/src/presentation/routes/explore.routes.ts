@@ -18,8 +18,8 @@ router.get(
       lng,
       distance = '10000', // 10km default
       rating,
-      priceRange,
-      hasAvailability,
+      priceRange: _priceRange,
+      hasAvailability: _hasAvailability,
       page = '1',
       limit = '20',
     } = req.query;
@@ -120,7 +120,7 @@ router.get(
       .limit(Math.min(parseInt(limit as string), 50))
       .lean();
 
-    res.json({
+    return res.json({
       success: true,
       data: { businesses },
     });

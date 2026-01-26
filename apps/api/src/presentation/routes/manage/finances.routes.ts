@@ -3,31 +3,27 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { Transaction } from '../../../infrastructure/database/mongodb/models/Transaction.js';
 import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
-import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
 import { asyncHandler, NotFoundError, BadRequestError } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { mercadoPagoService } from '../../../infrastructure/external/mercadopago/index.js';
 import { logger } from '../../../utils/logger.js';
 
 const router = Router();
 
 // Validation schemas
 const createTransactionSchema = z.object({
-  type: z.enum(['income', 'expense', 'refund', 'adjustment']),
-  category: z.string().min(1).max(50),
+  type: z.enum(['payment', 'sale', 'refund', 'deposit', 'tip', 'expense']),
+  category: z.string().min(1).max(50).optional(),
   amount: z.number().positive(),
-  description: z.string().max(500).optional(),
+  notes: z.string().max(500).optional(),
   appointmentId: z.string().optional(),
-  paymentMethod: z.enum(['cash', 'card', 'transfer', 'mercadopago', 'other']).optional(),
-  reference: z.string().max(100).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  paymentMethod: z.enum(['cash', 'card', 'transfer', 'mercadopago', 'mixed', 'other']).optional(),
+  source: z.enum(['appointment', 'pos', 'online', 'manual']).optional(),
 });
 
 const updateTransactionSchema = z.object({
-  category: z.string().min(1).max(50).optional(),
-  description: z.string().max(500).optional(),
-  paymentMethod: z.enum(['cash', 'card', 'transfer', 'mercadopago', 'other']).optional(),
-  reference: z.string().max(100).optional(),
+  expenseCategory: z.string().min(1).max(50).optional(),
+  notes: z.string().max(500).optional(),
+  paymentMethod: z.enum(['cash', 'card', 'transfer', 'mercadopago', 'mixed', 'other']).optional(),
 });
 
 const dateRangeSchema = z.object({
@@ -103,7 +99,7 @@ router.get(
       {
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
-          date: { $gte: startDate, $lte: now },
+          createdAt: { $gte: startDate, $lte: now },
           status: { $in: ['completed', 'pending'] },
         },
       },
@@ -121,7 +117,7 @@ router.get(
       {
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
-          date: { $gte: previousStartDate, $lte: previousEndDate },
+          createdAt: { $gte: previousStartDate, $lte: previousEndDate },
           status: { $in: ['completed', 'pending'] },
         },
       },
@@ -138,11 +134,18 @@ router.get(
     const getTotalByType = (data: { _id: string; total: number }[], type: string) =>
       data.find((d) => d._id === type)?.total || 0;
 
-    const currentIncome = getTotalByType(currentPeriod, 'income');
+    // Income types: payment, sale, deposit, tip
+    const currentIncome = getTotalByType(currentPeriod, 'payment') +
+      getTotalByType(currentPeriod, 'sale') +
+      getTotalByType(currentPeriod, 'deposit') +
+      getTotalByType(currentPeriod, 'tip');
     const currentExpenses = getTotalByType(currentPeriod, 'expense');
     const currentRefunds = getTotalByType(currentPeriod, 'refund');
 
-    const previousIncome = getTotalByType(previousPeriod, 'income');
+    const previousIncome = getTotalByType(previousPeriod, 'payment') +
+      getTotalByType(previousPeriod, 'sale') +
+      getTotalByType(previousPeriod, 'deposit') +
+      getTotalByType(previousPeriod, 'tip');
     const previousExpenses = getTotalByType(previousPeriod, 'expense');
 
     const currentProfit = currentIncome - currentExpenses - currentRefunds;
@@ -241,13 +244,13 @@ router.get(
     const businessId = req.currentBusiness!.businessId;
     const {
       type,
-      category,
+      expenseCategory,
       startDate,
       endDate,
       paymentMethod,
       page = '1',
       limit = '20',
-      sort = '-date',
+      sort = '-createdAt',
     } = req.query as Record<string, string>;
 
     const pageNum = parseInt(page, 10);
@@ -260,8 +263,8 @@ router.get(
       query.type = type;
     }
 
-    if (category) {
-      query.category = category;
+    if (expenseCategory) {
+      query['expense.category'] = expenseCategory;
     }
 
     if (paymentMethod) {
@@ -269,12 +272,12 @@ router.get(
     }
 
     if (startDate || endDate) {
-      query.date = {};
+      query.createdAt = {};
       if (startDate) {
-        (query.date as Record<string, Date>).$gte = new Date(startDate);
+        (query.createdAt as Record<string, Date>).$gte = new Date(startDate);
       }
       if (endDate) {
-        (query.date as Record<string, Date>).$lte = new Date(endDate + 'T23:59:59');
+        (query.createdAt as Record<string, Date>).$lte = new Date(endDate + 'T23:59:59');
       }
     }
 
@@ -284,7 +287,7 @@ router.get(
     const [transactions, total] = await Promise.all([
       Transaction.find(query)
         .populate('appointmentId', 'clientInfo services startTime date')
-        .populate('createdBy', 'profile.firstName profile.lastName')
+        .populate('processedBy', 'profile.firstName profile.lastName')
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limitNum)
@@ -303,12 +306,18 @@ router.get(
       },
     ]);
 
+    // Income types: payment, sale, deposit, tip
+    const incomeTotal = (totals.find((t) => t._id === 'payment')?.total || 0) +
+      (totals.find((t) => t._id === 'sale')?.total || 0) +
+      (totals.find((t) => t._id === 'deposit')?.total || 0) +
+      (totals.find((t) => t._id === 'tip')?.total || 0);
+
     res.json({
       success: true,
       data: {
         transactions,
         totals: {
-          income: totals.find((t) => t._id === 'income')?.total || 0,
+          income: incomeTotal,
           expense: totals.find((t) => t._id === 'expense')?.total || 0,
           refund: totals.find((t) => t._id === 'refund')?.total || 0,
         },
@@ -332,12 +341,8 @@ router.post(
     const businessId = req.currentBusiness!.businessId;
 
     // Validate category based on type
-    if (data.type === 'expense' && !EXPENSE_CATEGORIES.includes(data.category)) {
+    if (data.type === 'expense' && data.category && !EXPENSE_CATEGORIES.includes(data.category)) {
       throw new BadRequestError(`Invalid expense category. Valid categories: ${EXPENSE_CATEGORIES.join(', ')}`);
-    }
-
-    if (data.type === 'income' && !INCOME_CATEGORIES.includes(data.category)) {
-      throw new BadRequestError(`Invalid income category. Valid categories: ${INCOME_CATEGORIES.join(', ')}`);
     }
 
     // Validate appointment exists if provided
@@ -354,15 +359,21 @@ router.post(
     const transaction = new Transaction({
       businessId,
       type: data.type,
-      category: data.category,
+      source: data.source || 'manual',
       amount: data.amount,
-      description: data.description,
+      finalTotal: data.amount,
+      currency: 'ARS',
+      notes: data.notes,
       appointmentId: data.appointmentId,
       paymentMethod: data.paymentMethod || 'cash',
-      reference: data.reference,
-      date: data.date ? new Date(data.date) : new Date(),
+      items: [],
+      payments: data.paymentMethod ? [{ method: data.paymentMethod, amount: data.amount, processedAt: new Date() }] : [],
+      totalRefunded: 0,
+      refunds: [],
       status: 'completed',
-      createdBy: req.user!.id,
+      processedBy: req.user!.id,
+      processedAt: new Date(),
+      ...(data.type === 'expense' && data.category ? { expense: { category: data.category } } : {}),
     });
 
     await transaction.save();
@@ -392,7 +403,7 @@ router.get(
       businessId: req.currentBusiness!.businessId,
     })
       .populate('appointmentId')
-      .populate('createdBy', 'profile.firstName profile.lastName email');
+      .populate('processedBy', 'profile.firstName profile.lastName email');
 
     if (!transaction) {
       throw new NotFoundError('Transaction not found');
@@ -422,10 +433,15 @@ router.put(
     }
 
     // Only allow updating certain fields
-    if (data.category) transaction.category = data.category;
-    if (data.description !== undefined) transaction.description = data.description;
+    if (data.expenseCategory && transaction.type === 'expense') {
+      if (!transaction.expense) {
+        transaction.expense = { category: data.expenseCategory, description: data.notes || '' };
+      } else {
+        transaction.expense.category = data.expenseCategory;
+      }
+    }
+    if (data.notes !== undefined) transaction.notes = data.notes;
     if (data.paymentMethod) transaction.paymentMethod = data.paymentMethod;
-    if (data.reference !== undefined) transaction.reference = data.reference;
 
     await transaction.save();
 
@@ -483,19 +499,19 @@ router.get(
     const start = new Date(startDate);
     const end = new Date(endDate + 'T23:59:59');
 
-    // Income by category
-    const incomeByCategory = await Transaction.aggregate([
+    // Income by type (payment, sale, deposit, tip are income types)
+    const incomeByType = await Transaction.aggregate([
       {
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
-          type: 'income',
+          type: { $in: ['payment', 'sale', 'deposit', 'tip'] },
           status: 'completed',
-          date: { $gte: start, $lte: end },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
         $group: {
-          _id: '$category',
+          _id: '$type',
           total: { $sum: '$amount' },
           count: { $sum: 1 },
         },
@@ -510,12 +526,12 @@ router.get(
           businessId: new mongoose.Types.ObjectId(businessId),
           type: 'expense',
           status: 'completed',
-          date: { $gte: start, $lte: end },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
         $group: {
-          _id: '$category',
+          _id: '$expense.category',
           total: { $sum: '$amount' },
           count: { $sum: 1 },
         },
@@ -529,13 +545,13 @@ router.get(
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
           status: 'completed',
-          date: { $gte: start, $lte: end },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
             type: '$type',
           },
           total: { $sum: '$amount' },
@@ -546,13 +562,14 @@ router.get(
 
     // Transform daily breakdown
     const dailyData: Record<string, { date: string; income: number; expenses: number; profit: number }> = {};
+    const incomeTypes = ['payment', 'sale', 'deposit', 'tip'];
     dailyBreakdown.forEach((item) => {
       const date = item._id.date;
       if (!dailyData[date]) {
         dailyData[date] = { date, income: 0, expenses: 0, profit: 0 };
       }
-      if (item._id.type === 'income') {
-        dailyData[date].income = item.total;
+      if (incomeTypes.includes(item._id.type)) {
+        dailyData[date].income += item.total;
       } else if (item._id.type === 'expense') {
         dailyData[date].expenses = item.total;
       }
@@ -564,9 +581,9 @@ router.get(
       {
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
-          type: 'income',
+          type: { $in: ['payment', 'sale', 'deposit', 'tip'] },
           status: 'completed',
-          date: { $gte: start, $lte: end },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
@@ -600,7 +617,7 @@ router.get(
     ]);
 
     // Calculate totals
-    const totalIncome = incomeByCategory.reduce((sum, cat) => sum + cat.total, 0);
+    const totalIncome = incomeByType.reduce((sum, cat) => sum + cat.total, 0);
     const totalExpenses = expensesByCategory.reduce((sum, cat) => sum + cat.total, 0);
 
     res.json({
@@ -613,7 +630,7 @@ router.get(
           profit: totalIncome - totalExpenses,
           margin: totalIncome > 0 ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 100) : 0,
         },
-        incomeByCategory,
+        incomeByType,
         expensesByCategory,
         paymentMethods,
         dailyBreakdown: Object.values(dailyData),
@@ -645,14 +662,14 @@ router.get(
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
           status: 'completed',
-          date: { $gte: startDate },
+          createdAt: { $gte: startDate },
         },
       },
       {
         $group: {
           _id: {
-            year: { $year: '$date' },
-            month: { $month: '$date' },
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
             type: '$type',
           },
           total: { $sum: '$amount' },
@@ -675,11 +692,12 @@ router.get(
       };
     }
 
+    const incomeTypes = ['payment', 'sale', 'deposit', 'tip'];
     cashFlow.forEach((item) => {
       const key = `${item._id.year}-${String(item._id.month).padStart(2, '0')}`;
       if (monthlyData[key]) {
-        if (item._id.type === 'income') {
-          monthlyData[key].income = item.total;
+        if (incomeTypes.includes(item._id.type)) {
+          monthlyData[key].income += item.total;
         } else if (item._id.type === 'expense' || item._id.type === 'refund') {
           monthlyData[key].expenses += item.total;
         }
@@ -725,14 +743,20 @@ router.post(
     const refundTransaction = new Transaction({
       businessId,
       type: 'refund',
-      category: 'servicios',
+      source: 'appointment',
       amount,
-      description: reason || `Reembolso para turno #${appointment._id}`,
+      finalTotal: amount,
+      currency: 'ARS',
+      notes: reason || `Reembolso para turno #${appointment._id}`,
       appointmentId: appointment._id,
       paymentMethod: 'transfer',
+      items: [],
+      payments: [{ method: 'transfer', amount, processedAt: new Date() }],
+      totalRefunded: 0,
+      refunds: [],
       status: 'completed',
-      date: new Date(),
-      createdBy: req.user!.id,
+      processedAt: new Date(),
+      processedBy: req.user!.id,
     });
 
     await refundTransaction.save();

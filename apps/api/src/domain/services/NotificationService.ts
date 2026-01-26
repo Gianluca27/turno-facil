@@ -2,7 +2,7 @@ import { addJob, scheduleJob, QUEUE_NAMES, NotificationJobData, ReviewRequestJob
 import { scheduleAppointmentReminders, cancelAppointmentReminders } from '../../infrastructure/jobs/workers/reminder.worker.js';
 import { Notification } from '../../infrastructure/database/mongodb/models/Notification.js';
 import { User } from '../../infrastructure/database/mongodb/models/User.js';
-import { Business } from '../../infrastructure/database/mongodb/models/Business.js';
+// Unused import removed
 import { logger } from '../../utils/logger.js';
 
 export interface SendNotificationParams {

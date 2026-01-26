@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import config from '../../config/index.js';
 import { getRedisClient } from '../../config/database.js';
@@ -40,11 +40,13 @@ class AuthService {
       jti,
     };
 
-    return jwt.sign(payload, config.jwt.accessSecret, {
+    const options: SignOptions = {
       expiresIn: config.jwt.accessExpiresIn,
       issuer: config.jwt.issuer,
       audience: config.jwt.audience,
-    });
+    } as SignOptions;
+
+    return jwt.sign(payload, config.jwt.accessSecret, options);
   }
 
   // Generate refresh token
@@ -60,11 +62,13 @@ class AuthService {
       jti,
     };
 
-    const token = jwt.sign(payload, config.jwt.refreshSecret, {
+    const options: SignOptions = {
       expiresIn: config.jwt.refreshExpiresIn,
       issuer: config.jwt.issuer,
       audience: config.jwt.audience,
-    });
+    } as SignOptions;
+
+    const token = jwt.sign(payload, config.jwt.refreshSecret, options);
 
     return { token, family: tokenFamily, expiresAt };
   }
@@ -75,8 +79,7 @@ class AuthService {
     const { token: refreshToken, expiresAt } = this.generateRefreshToken(userId);
 
     // Save refresh token to user document
-    const Model = userType === 'user' ? User : BusinessUser;
-    await Model.findByIdAndUpdate(userId, {
+    const updateData = {
       $push: {
         refreshTokens: {
           token: refreshToken,
@@ -85,17 +88,30 @@ class AuthService {
         },
       },
       lastLoginAt: new Date(),
-    });
+    };
 
-    // Clean up old refresh tokens (keep max 5)
-    await Model.findByIdAndUpdate(userId, {
-      $push: {
-        refreshTokens: {
-          $each: [],
-          $slice: -5,
+    if (userType === 'user') {
+      await User.findByIdAndUpdate(userId, updateData);
+      // Clean up old refresh tokens (keep max 5)
+      await User.findByIdAndUpdate(userId, {
+        $push: {
+          refreshTokens: {
+            $each: [],
+            $slice: -5,
+          },
         },
-      },
-    });
+      });
+    } else {
+      await BusinessUser.findByIdAndUpdate(userId, updateData);
+      await BusinessUser.findByIdAndUpdate(userId, {
+        $push: {
+          refreshTokens: {
+            $each: [],
+            $slice: -5,
+          },
+        },
+      });
+    }
 
     return {
       accessToken,
@@ -142,26 +158,37 @@ class AuthService {
         throw new UnauthorizedError('Token has been revoked');
       }
 
-      // Remove old refresh token
-      const Model = userType === 'user' ? User : BusinessUser;
-      await Model.findByIdAndUpdate(payload.sub, {
-        $pull: { refreshTokens: { token: refreshToken } },
-      });
-
-      // Generate new token pair with same family
+      // Remove old refresh token and add new one
       const accessToken = this.generateAccessToken(payload.sub, userType);
       const { token: newRefreshToken, expiresAt } = this.generateRefreshToken(payload.sub, payload.family);
 
-      // Save new refresh token
-      await Model.findByIdAndUpdate(payload.sub, {
-        $push: {
-          refreshTokens: {
-            token: newRefreshToken,
-            device,
-            expiresAt,
+      if (userType === 'user') {
+        await User.findByIdAndUpdate(payload.sub, {
+          $pull: { refreshTokens: { token: refreshToken } },
+        });
+        await User.findByIdAndUpdate(payload.sub, {
+          $push: {
+            refreshTokens: {
+              token: newRefreshToken,
+              device,
+              expiresAt,
+            },
           },
-        },
-      });
+        });
+      } else {
+        await BusinessUser.findByIdAndUpdate(payload.sub, {
+          $pull: { refreshTokens: { token: refreshToken } },
+        });
+        await BusinessUser.findByIdAndUpdate(payload.sub, {
+          $push: {
+            refreshTokens: {
+              token: newRefreshToken,
+              device,
+              expiresAt,
+            },
+          },
+        });
+      }
 
       return {
         accessToken,
@@ -203,16 +230,24 @@ class AuthService {
 
   // Logout
   async logout(userId: string, refreshToken?: string, userType: 'user' | 'business_user' = 'user'): Promise<void> {
-    const Model = userType === 'user' ? User : BusinessUser;
-
     if (refreshToken) {
       // Remove specific refresh token
-      await Model.findByIdAndUpdate(userId, {
-        $pull: { refreshTokens: { token: refreshToken } },
-      });
+      if (userType === 'user') {
+        await User.findByIdAndUpdate(userId, {
+          $pull: { refreshTokens: { token: refreshToken } },
+        });
+      } else {
+        await BusinessUser.findByIdAndUpdate(userId, {
+          $pull: { refreshTokens: { token: refreshToken } },
+        });
+      }
     } else {
       // Remove all refresh tokens
-      await Model.findByIdAndUpdate(userId, { refreshTokens: [] });
+      if (userType === 'user') {
+        await User.findByIdAndUpdate(userId, { refreshTokens: [] });
+      } else {
+        await BusinessUser.findByIdAndUpdate(userId, { refreshTokens: [] });
+      }
     }
   }
 
@@ -441,8 +476,13 @@ class AuthService {
 
   // Change password
   async changePassword(userId: string, currentPassword: string, newPassword: string, userType: 'user' | 'business_user'): Promise<void> {
-    const Model = userType === 'user' ? User : BusinessUser;
-    const user = await Model.findById(userId).select('+password');
+    let user: IUser | IBusinessUser | null;
+
+    if (userType === 'user') {
+      user = await User.findById(userId).select('+password');
+    } else {
+      user = await BusinessUser.findById(userId).select('+password');
+    }
 
     if (!user) {
       throw new BadRequestError('User not found');
@@ -461,7 +501,11 @@ class AuthService {
     await user.save();
 
     // Revoke all existing refresh tokens
-    await Model.findByIdAndUpdate(userId, { refreshTokens: [] });
+    if (userType === 'user') {
+      await User.findByIdAndUpdate(userId, { refreshTokens: [] });
+    } else {
+      await BusinessUser.findByIdAndUpdate(userId, { refreshTokens: [] });
+    }
 
     logger.info('Password changed', { userId });
   }

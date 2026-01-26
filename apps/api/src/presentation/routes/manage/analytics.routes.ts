@@ -5,7 +5,6 @@ import { Review } from '../../../infrastructure/database/mongodb/models/Review.j
 import { ClientBusinessRelation } from '../../../infrastructure/database/mongodb/models/ClientBusinessRelation.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
 import { Staff } from '../../../infrastructure/database/mongodb/models/Staff.js';
-import { Transaction } from '../../../infrastructure/database/mongodb/models/Transaction.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
 
@@ -97,11 +96,11 @@ router.get(
     const [currentNewClients, previousNewClients] = await Promise.all([
       ClientBusinessRelation.countDocuments({
         businessId: businessObjId,
-        firstVisitAt: { $gte: startDate, $lte: now },
+        createdAt: { $gte: startDate, $lte: now },
       }),
       ClientBusinessRelation.countDocuments({
         businessId: businessObjId,
-        firstVisitAt: { $gte: previousStart, $lte: previousEnd },
+        createdAt: { $gte: previousStart, $lte: previousEnd },
       }),
     ]);
 
@@ -118,7 +117,7 @@ router.get(
           $group: {
             _id: null,
             count: { $sum: 1 },
-            avgRating: { $avg: '$rating' },
+            avgRating: { $avg: '$ratings.overall' },
           },
         },
       ]),
@@ -133,7 +132,7 @@ router.get(
           $group: {
             _id: null,
             count: { $sum: 1 },
-            avgRating: { $avg: '$rating' },
+            avgRating: { $avg: '$ratings.overall' },
           },
         },
       ]),
@@ -373,14 +372,14 @@ router.get(
 
     // Get service details
     const serviceIds = servicePerformance.map((s) => s._id);
-    const services = await Service.find({ _id: { $in: serviceIds } }).select('name category duration').lean();
+    const services = await Service.find({ _id: { $in: serviceIds } }).select('name categoryId duration').lean();
     const serviceMap = new Map(services.map((s) => [s._id.toString(), s]));
 
     const enrichedServices = servicePerformance.map((s) => {
       const service = serviceMap.get(s._id?.toString());
       return {
         ...s,
-        category: service?.category,
+        category: service?.categoryId,
         duration: service?.duration,
       };
     });
@@ -473,7 +472,7 @@ router.get(
         $group: {
           _id: '$staffId',
           reviewCount: { $sum: 1 },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$ratings.overall' },
         },
       },
     ]);
@@ -536,12 +535,12 @@ router.get(
       {
         $match: {
           businessId: new mongoose.Types.ObjectId(businessId),
-          firstVisitAt: { $gte: start, $lte: end },
+          createdAt: { $gte: start, $lte: end },
         },
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$firstVisitAt' } },
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
           count: { $sum: 1 },
         },
       },
@@ -555,19 +554,19 @@ router.get(
 
     const returningClients = await ClientBusinessRelation.countDocuments({
       businessId: new mongoose.Types.ObjectId(businessId),
-      totalBookings: { $gte: 2 },
+      'stats.totalVisits': { $gte: 2 },
     });
 
     const loyalClients = await ClientBusinessRelation.countDocuments({
       businessId: new mongoose.Types.ObjectId(businessId),
-      totalBookings: { $gte: 5 },
+      'stats.totalVisits': { $gte: 5 },
     });
 
     // Top clients
     const topClients = await ClientBusinessRelation.find({
       businessId: new mongoose.Types.ObjectId(businessId),
     })
-      .sort({ totalSpent: -1 })
+      .sort({ 'stats.totalSpent': -1 })
       .limit(10)
       .populate('clientId', 'profile.firstName profile.lastName email phone')
       .lean();
@@ -581,12 +580,12 @@ router.get(
       },
       {
         $bucket: {
-          groupBy: '$totalBookings',
+          groupBy: '$stats.totalVisits',
           boundaries: [0, 1, 2, 5, 10, 20, 100],
           default: '100+',
           output: {
             count: { $sum: 1 },
-            totalRevenue: { $sum: '$totalSpent' },
+            totalRevenue: { $sum: '$stats.totalSpent' },
           },
         },
       },
@@ -613,16 +612,19 @@ router.get(
           retentionRate: totalClients > 0 ? Math.round((returningClients / totalClients) * 100) : 0,
           loyaltyRate: totalClients > 0 ? Math.round((loyalClients / totalClients) * 100) : 0,
         },
-        topClients: topClients.map((c) => ({
-          clientId: c.clientId?._id || c.clientId,
-          name: c.clientId?.profile
-            ? `${c.clientId.profile.firstName} ${c.clientId.profile.lastName}`
-            : 'Cliente',
-          email: c.clientId?.email,
-          totalBookings: c.totalBookings,
-          totalSpent: c.totalSpent,
-          lastVisit: c.lastVisitAt,
-        })),
+        topClients: topClients.map((c) => {
+          const client = c.clientId as unknown as { _id?: string; profile?: { firstName?: string; lastName?: string }; email?: string } | undefined;
+          return {
+            clientId: client?._id || c.clientId,
+            name: client?.profile
+              ? `${client.profile.firstName} ${client.profile.lastName}`
+              : 'Cliente',
+            email: client?.email,
+            totalBookings: c.stats.totalVisits,
+            totalSpent: c.stats.totalSpent,
+            lastVisit: c.stats.lastVisit,
+          };
+        }),
         segments: segments.map((s) => ({
           segment: segmentLabels[s._id] || `${s._id}+`,
           count: s.count,
@@ -702,7 +704,7 @@ router.get(
             month: { $month: '$createdAt' },
           },
           count: { $sum: 1 },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$ratings.overall' },
         },
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },

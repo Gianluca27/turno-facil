@@ -1,4 +1,4 @@
-import { Queue, QueueEvents, Worker, Job, ConnectionOptions } from 'bullmq';
+import { Queue, QueueEvents, Job, ConnectionOptions } from 'bullmq';
 import config from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 
@@ -179,14 +179,15 @@ export async function addJob<T>(
     repeat: options?.repeat,
   };
 
-  const job = await queue.add(queueName, data, jobOptions);
+  // Cast to any to satisfy BullMQ's strict typing while maintaining our type safety
+  const job = await queue.add(queueName as any, data as any, jobOptions);
 
   logger.debug(`Job added to queue ${queueName}`, {
     jobId: job.id,
     delay: options?.delay,
   });
 
-  return job;
+  return job as unknown as Job<T>;
 }
 
 // Schedule job for specific time
