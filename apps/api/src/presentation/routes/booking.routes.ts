@@ -53,9 +53,9 @@ router.post(
       throw new NotFoundError('Business not found or not active');
     }
 
-    // Check if bookings are enabled
-    if (!business.bookingConfig.enabled) {
-      throw new BadRequestError('Online bookings are not available for this business');
+    // Check if instant booking is available
+    if (!business.bookingConfig.allowInstantBooking && business.bookingConfig.requireConfirmation) {
+      // Bookings will require confirmation from the business
     }
 
     // Get services
@@ -120,15 +120,17 @@ router.post(
 
     // Check if booking is within allowed advance window
     const now = new Date();
-    const maxAdvanceDate = new Date(now.getTime() + business.bookingConfig.maxAdvanceDays * 24 * 60 * 60 * 1000);
-    const minAdvanceDate = new Date(now.getTime() + business.bookingConfig.minAdvanceMinutes * 60 * 1000);
+    const minAdvanceHours = business.bookingConfig.minAdvance;
+    const maxAdvanceDays = business.bookingConfig.maxAdvance;
+    const maxAdvanceDate = new Date(now.getTime() + maxAdvanceDays * 24 * 60 * 60 * 1000);
+    const minAdvanceDate = new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000);
 
     if (startDateTime < minAdvanceDate) {
-      throw new BadRequestError(`Bookings must be made at least ${business.bookingConfig.minAdvanceMinutes} minutes in advance`);
+      throw new BadRequestError(`Bookings must be made at least ${minAdvanceHours} hours in advance`);
     }
 
     if (startDateTime > maxAdvanceDate) {
-      throw new BadRequestError(`Bookings cannot be made more than ${business.bookingConfig.maxAdvanceDays} days in advance`);
+      throw new BadRequestError(`Bookings cannot be made more than ${maxAdvanceDays} days in advance`);
     }
 
     // Verify availability
@@ -562,19 +564,12 @@ router.post(
     appointment.startDateTime = newStartDateTime;
     appointment.endDateTime = newEndDateTime;
 
-    if (!appointment.history) {
-      appointment.history = [];
-    }
-    appointment.history.push({
-      action: 'rescheduled',
-      performedBy: new mongoose.Types.ObjectId(req.user!.id),
-      performedAt: new Date(),
-      details: {
-        oldDate,
-        oldTime,
-        newDate: formatDate(newDate),
-        newTime: data.startTime,
-      },
+    // Add reschedule to status history
+    appointment.statusHistory.push({
+      status: 'rescheduled',
+      changedBy: new mongoose.Types.ObjectId(req.user!.id),
+      changedAt: new Date(),
+      reason: `Rescheduled from ${oldDate} ${oldTime} to ${formatDate(newDate)} ${data.startTime}`,
     });
 
     await appointment.save();
@@ -648,7 +643,7 @@ router.post(
         },
       ],
       payer: {
-        email: appointment.clientInfo.email,
+        email: appointment.clientInfo.email || '',
         name: appointment.clientInfo.name,
       },
       externalReference: `deposit_${appointment._id}`,
@@ -924,26 +919,20 @@ async function validateAndApplyDiscount(
     return null;
   }
 
-  // Check if user already used this promotion
-  if (promotion.usagePerUser && promotion.usagePerUser > 0) {
-    const userUsageCount = promotion.usedBy?.filter(
-      (u: { userId: mongoose.Types.ObjectId }) => u.userId.toString() === userId
-    ).length || 0;
-
-    if (userUsageCount >= promotion.usagePerUser) {
-      return null;
-    }
+  // Check if total usage limit reached
+  if (promotion.limits.totalUses && promotion.limits.currentUses >= promotion.limits.totalUses) {
+    return null;
   }
 
   // Check minimum purchase amount
-  if (promotion.minPurchaseAmount && subtotal < promotion.minPurchaseAmount) {
+  if (promotion.conditions.minPurchase && subtotal < promotion.conditions.minPurchase) {
     return null;
   }
 
   // Check if promotion applies to specific services
-  if (promotion.applicableServices && promotion.applicableServices.length > 0) {
+  if (promotion.conditions.services && promotion.conditions.services.length > 0) {
     const hasApplicableService = serviceIds.some(
-      (id) => promotion.applicableServices!.map((s: mongoose.Types.ObjectId) => s.toString()).includes(id)
+      (id) => promotion.conditions.services!.map((s: mongoose.Types.ObjectId) => s.toString()).includes(id)
     );
     if (!hasApplicableService) {
       return null;
@@ -952,10 +941,10 @@ async function validateAndApplyDiscount(
 
   return {
     _id: promotion._id,
-    code: promotion.code,
-    discountType: promotion.discountType as 'percentage' | 'fixed',
-    discountValue: promotion.discountValue,
-    maxDiscountAmount: promotion.maxDiscountAmount,
+    code: promotion.code || '',
+    discountType: promotion.discount.type,
+    discountValue: promotion.discount.amount,
+    maxDiscountAmount: promotion.discount.maxDiscount,
   };
 }
 
