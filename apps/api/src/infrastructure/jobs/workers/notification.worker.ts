@@ -13,7 +13,6 @@ import {
   PushJobData,
   SMSJobData,
 } from '../queues.js';
-import { sendGridService } from '../../external/sendgrid/index.js';
 import { googleService } from '../../external/google/index.js';
 
 let notificationWorker: Worker | null = null;

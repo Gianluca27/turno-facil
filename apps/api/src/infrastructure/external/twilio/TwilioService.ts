@@ -1,7 +1,6 @@
 import twilio from 'twilio';
 import config from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
-import { BadRequestError } from '../../../presentation/middleware/errorHandler.js';
 
 export interface SendSMSParams {
   to: string;

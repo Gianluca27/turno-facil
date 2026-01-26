@@ -18,8 +18,8 @@ router.get(
       lng,
       distance = '10000', // 10km default
       rating,
-      priceRange,
-      hasAvailability,
+      priceRange: _priceRange,
+      hasAvailability: _hasAvailability,
       page = '1',
       limit = '20',
     } = req.query;
