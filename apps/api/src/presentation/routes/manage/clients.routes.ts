@@ -12,7 +12,7 @@ router.get(
   requirePermission('clients:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const businessId = req.currentBusiness!.businessId;
-    const { q, segment, page = '1', limit = '20' } = req.query;
+    const { q: _searchQuery, segment, page = '1', limit = '20' } = req.query;
 
     const query: any = { businessId };
 

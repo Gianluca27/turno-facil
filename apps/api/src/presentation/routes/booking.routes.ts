@@ -890,7 +890,7 @@ function formatDate(date: Date): string {
 async function validateAndApplyDiscount(
   code: string,
   businessId: string,
-  userId: string,
+  _userId: string, // Reserved for future per-user limits
   subtotal: number,
   serviceIds: string[]
 ): Promise<{

@@ -497,7 +497,7 @@ router.post(
       `,
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Verification email sent',
     });

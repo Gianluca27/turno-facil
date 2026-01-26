@@ -61,7 +61,7 @@ router.get(
     const uncategorized = services.filter((s) => !s.categoryId);
     if (uncategorized.length > 0) {
       groupedServices.push({
-        category: { id: 'uncategorized', name: 'Otros', description: '' },
+        category: { id: 'uncategorized' as any, name: 'Otros', description: '' },
         services: uncategorized,
       });
     }
@@ -255,7 +255,7 @@ router.get(
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: { slots, date: date as string },
     });

@@ -120,7 +120,7 @@ router.get(
       .limit(Math.min(parseInt(limit as string), 50))
       .lean();
 
-    res.json({
+    return res.json({
       success: true,
       data: { businesses },
     });

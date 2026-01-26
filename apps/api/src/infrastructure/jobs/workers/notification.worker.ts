@@ -4,7 +4,7 @@ import { logger } from '../../../utils/logger.js';
 import { User } from '../../database/mongodb/models/User.js';
 import { Business } from '../../database/mongodb/models/Business.js';
 import { Appointment } from '../../database/mongodb/models/Appointment.js';
-import { Notification } from '../../database/mongodb/models/Notification.js';
+import { Notification, IDeliveryResult } from '../../database/mongodb/models/Notification.js';
 import {
   QUEUE_NAMES,
   NotificationJobData,
@@ -66,7 +66,7 @@ async function processNotificationJob(job: Job<NotificationJobData>): Promise<vo
     });
     await notification.save();
 
-    const results: { channel: string; success: boolean; error?: string }[] = [];
+    const results: IDeliveryResult[] = [];
 
     // Send through each channel
     for (const channel of data.channels) {

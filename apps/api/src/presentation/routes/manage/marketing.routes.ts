@@ -453,11 +453,19 @@ router.post(
 
     const businessId = req.currentBusiness!.businessId;
 
-    // Get target audience
+    // Get target audience - convert customFilters to expected format
+    const customFiltersConverted = campaign.audience?.customFilters ? {
+      lastVisitDaysAgo: campaign.audience.customFilters.lastVisitDaysAgo?.min,
+      totalVisits: campaign.audience.customFilters.totalVisits?.min,
+      totalSpent: campaign.audience.customFilters.totalSpent?.min,
+      services: campaign.audience.customFilters.services?.map(s => s.toString()),
+      staff: campaign.audience.customFilters.staff?.map(s => s.toString()),
+    } : undefined;
+
     const audienceQuery = await buildAudienceQuery(
       businessId,
       campaign.audience?.type === 'segment' ? campaign.audience?.segment : campaign.audience?.type,
-      campaign.audience?.customFilters
+      customFiltersConverted
     );
 
     const clients = await ClientBusinessRelation.find(audienceQuery)
@@ -630,14 +638,17 @@ router.post(
       success: true,
       data: {
         count,
-        sample: sample.map((c) => ({
-          name: c.clientId?.profile
-            ? `${c.clientId.profile.firstName} ${c.clientId.profile.lastName}`
-            : 'Cliente',
-          email: c.clientId?.email,
-          totalBookings: c.totalBookings,
-          totalSpent: c.totalSpent,
-        })),
+        sample: sample.map((c) => {
+          const client = c.clientId as unknown as { profile?: { firstName?: string; lastName?: string }; email?: string } | null;
+          return {
+            name: client?.profile
+              ? `${client.profile.firstName || ''} ${client.profile.lastName || ''}`.trim() || 'Cliente'
+              : 'Cliente',
+            email: client?.email,
+            totalBookings: c.stats.totalVisits,
+            totalSpent: c.stats.totalSpent,
+          };
+        }),
       },
     });
   })

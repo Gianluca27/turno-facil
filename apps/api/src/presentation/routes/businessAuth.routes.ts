@@ -145,7 +145,7 @@ router.post(
 router.post(
   '/reset-password',
   authRateLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, _res: Response) => {
     const { token, password } = req.body;
 
     if (!token || !password) {

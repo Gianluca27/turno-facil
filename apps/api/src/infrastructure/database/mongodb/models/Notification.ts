@@ -177,7 +177,8 @@ notificationSchema.statics.findUnread = function (
   })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .lean();
+    .lean()
+    .exec() as unknown as Promise<INotification[]>;
 };
 
 notificationSchema.statics.markAsRead = function (

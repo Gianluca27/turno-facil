@@ -368,7 +368,7 @@ class S3Service {
     }
   }
 
-  generateUploadKey(bucket: BucketType, folder: string, extension: string): string {
+  generateUploadKey(_bucket: BucketType, folder: string, extension: string): string {
     const uniqueId = uuidv4();
     const timestamp = Date.now();
     return `${folder}/${timestamp}-${uniqueId}.${extension}`;

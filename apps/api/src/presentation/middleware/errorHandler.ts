@@ -105,7 +105,7 @@ const formatZodErrors = (error: ZodError): Record<string, string[]> => {
 };
 
 // Not found handler
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction): void => {
+export const notFoundHandler = (req: Request, _res: Response, next: NextFunction): void => {
   next(new NotFoundError(`Route ${req.method} ${req.path} not found`));
 };
 
