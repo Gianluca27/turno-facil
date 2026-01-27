@@ -72,7 +72,7 @@ export default function ProfileScreen() {
     >
       <View style={styles.menuItemLeft}>
         <Icon name={item.icon} size={24} color={item.color || colors.text} />
-        <Text style={[styles.menuItemLabel, item.color && { color: item.color }]}>
+        <Text style={[styles.menuItemLabel, item.color ? { color: item.color } : undefined]}>
           {item.label}
         </Text>
       </View>

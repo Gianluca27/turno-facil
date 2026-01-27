@@ -66,7 +66,7 @@ export default function AppointmentDetailScreen() {
         {
           text: 'Sí, cancelar',
           style: 'destructive',
-          onPress: () => cancelMutation.mutate(),
+          onPress: () => cancelMutation.mutate(undefined),
         },
       ]
     );
