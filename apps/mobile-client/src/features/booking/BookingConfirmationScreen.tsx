@@ -77,8 +77,8 @@ export default function BookingConfirmationScreen() {
     mutationFn: () =>
       bookingApi.create({
         businessId,
-        services: serviceIds.map((id) => ({ serviceId: id })),
-        staffId,
+        serviceIds,
+        staffId: staffId || '',
         date,
         startTime,
         notes: notes || undefined,

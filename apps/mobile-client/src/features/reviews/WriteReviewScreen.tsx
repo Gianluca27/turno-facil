@@ -14,7 +14,7 @@ type RouteProps = RouteProp<AppointmentsStackParamList, 'WriteReview'>;
 export default function WriteReviewScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProps>();
-  const { appointmentId, businessId } = route.params;
+  const { appointmentId } = route.params;
   const queryClient = useQueryClient();
 
   const [ratings, setRatings] = useState({
@@ -29,10 +29,9 @@ export default function WriteReviewScreen() {
   const mutation = useMutation({
     mutationFn: () =>
       reviewsApi.create({
-        businessId,
         appointmentId,
         ratings,
-        text: text.trim() || undefined,
+        content: { text: text.trim() || 'Sin comentarios' },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });

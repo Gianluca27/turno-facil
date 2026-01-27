@@ -55,7 +55,7 @@ export type AppointmentsStackParamList = {
   AppointmentDetail: { appointmentId: string };
   RescheduleAppointment: { appointmentId: string };
   CancelAppointment: { appointmentId: string };
-  WriteReview: { appointmentId: string; businessId: string };
+  WriteReview: { appointmentId: string };
 };
 
 // Favorites Stack

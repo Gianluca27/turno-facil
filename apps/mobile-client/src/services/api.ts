@@ -213,8 +213,8 @@ export const businessApi = {
 export const bookingApi = {
   create: (data: {
     businessId: string;
-    services: { serviceId: string; quantity?: number }[];
-    staffId?: string;
+    serviceIds: string[];
+    staffId: string;
     date: string;
     startTime: string;
     notes?: string;
@@ -283,24 +283,30 @@ export const appointmentsApi = {
 export const waitlistApi = {
   join: (data: {
     businessId: string;
-    services: string[];
-    staffId?: string;
-    dateRange: { from: string; to: string };
-    timeRange?: { from: string; to: string };
-    daysOfWeek?: number[];
-  }) => api.post<ApiResponse<{ waitlistEntry: any }>>('/waitlist', data),
+    preferences: {
+      services?: string[];
+      staffId?: string;
+      dateRange: { from: string; to: string };
+      timeRange?: { from: string; to: string };
+      daysOfWeek?: number[];
+    };
+    notes?: string;
+  }) => api.post<ApiResponse<{ waitlist: any; position: number }>>('/waitlist', data),
 
   getMyEntries: () =>
-    api.get<ApiResponse<{ entries: any[] }>>('/waitlist/me'),
+    api.get<ApiResponse<{ waitlist: any[] }>>('/waitlist/me'),
+
+  getById: (waitlistId: string) =>
+    api.get<ApiResponse<{ waitlist: any }>>(`/waitlist/${waitlistId}`),
 
   cancel: (waitlistId: string) =>
     api.delete(`/waitlist/${waitlistId}`),
 
-  acceptSlot: (notificationId: string) =>
-    api.post<ApiResponse<{ appointment: any }>>(`/waitlist/${notificationId}/accept`),
+  acceptSlot: (waitlistId: string, notificationId: string) =>
+    api.post<ApiResponse<{ appointmentDetails?: any }>>(`/waitlist/${waitlistId}/notifications/${notificationId}/accept`),
 
-  declineSlot: (notificationId: string) =>
-    api.post(`/waitlist/${notificationId}/decline`),
+  declineSlot: (waitlistId: string, notificationId: string) =>
+    api.post(`/waitlist/${waitlistId}/notifications/${notificationId}/decline`),
 };
 
 // ============================================================================
@@ -308,14 +314,15 @@ export const waitlistApi = {
 // ============================================================================
 export const reviewsApi = {
   create: (data: {
-    businessId: string;
     appointmentId: string;
     ratings: { overall: number; service?: number; staff?: number; cleanliness?: number; value?: number };
-    text?: string;
-    photos?: string[];
+    content: { text: string; photos?: string[] };
   }) => api.post<ApiResponse<{ review: any }>>('/reviews', data),
 
-  update: (reviewId: string, data: { text?: string; ratings?: any }) =>
+  getById: (reviewId: string) =>
+    api.get<ApiResponse<{ review: any }>>(`/reviews/${reviewId}`),
+
+  update: (reviewId: string, data: { content?: { text: string; photos?: string[] }; ratings?: any }) =>
     api.put<ApiResponse<{ review: any }>>(`/reviews/${reviewId}`, data),
 
   delete: (reviewId: string) =>
@@ -328,7 +335,10 @@ export const reviewsApi = {
     api.post(`/reviews/${reviewId}/report`, data),
 
   getMyReviews: (params?: { page?: number; limit?: number }) =>
-    api.get<ApiResponse<PaginatedResponse<any>>>('/users/me/reviews', { params }),
+    api.get<ApiResponse<PaginatedResponse<any>>>('/reviews/me', { params }),
+
+  getPendingAppointments: () =>
+    api.get<ApiResponse<{ appointments: any[] }>>('/reviews/pending/appointments'),
 };
 
 // ============================================================================

@@ -77,10 +77,7 @@ export default function AppointmentDetailScreen() {
   };
 
   const handleWriteReview = () => {
-    navigation.navigate('WriteReview', {
-      appointmentId,
-      businessId: appointment.businessId,
-    });
+    navigation.navigate('WriteReview', { appointmentId });
   };
 
   const handleCall = () => {
