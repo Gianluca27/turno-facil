@@ -44,12 +44,19 @@ export const ServicesScreen: React.FC = () => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
 
   const { data, isLoading, isRefetching, refetch } = useQuery({
-    queryKey: ['services', currentBusiness?.businessId, searchQuery],
-    queryFn: () => servicesApi.getAll({ search: searchQuery }),
+    queryKey: ['services', currentBusiness?.businessId],
+    queryFn: () => servicesApi.list(),
     enabled: !!currentBusiness,
   });
 
   const services: Service[] = data?.data?.data?.services || [];
+
+  const filteredServices = React.useMemo(() =>
+    services.filter((s: Service) =>
+      searchQuery ? s.name.toLowerCase().includes(searchQuery.toLowerCase()) : true
+    ),
+    [services, searchQuery]
+  );
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -68,13 +75,13 @@ export const ServicesScreen: React.FC = () => {
 
   const groupedServices = React.useMemo(() => {
     const grouped: Record<string, Service[]> = {};
-    services.forEach((service) => {
+    filteredServices.forEach((service) => {
       const category = service.category || 'Sin categoría';
       if (!grouped[category]) grouped[category] = [];
       grouped[category].push(service);
     });
     return grouped;
-  }, [services]);
+  }, [filteredServices]);
 
   const categories = Object.keys(groupedServices);
 

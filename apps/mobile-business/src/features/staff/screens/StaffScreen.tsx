@@ -67,7 +67,7 @@ export const StaffScreen: React.FC = () => {
 
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['staff', currentBusiness?.businessId],
-    queryFn: () => staffApi.getAll(),
+    queryFn: () => staffApi.list(),
     enabled: !!currentBusiness,
   });
 

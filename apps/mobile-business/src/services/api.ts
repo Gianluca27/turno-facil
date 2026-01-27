@@ -204,7 +204,252 @@ export const settingsApi = {
   updateSchedule: (data: any) => api.put<ApiResponse<{ schedule: any }>>('/manage/settings/schedule', data),
   updateBooking: (data: any) => api.put<ApiResponse<{ bookingConfig: any }>>('/manage/settings/booking', data),
   updatePayments: (data: any) => api.put<ApiResponse<{ paymentConfig: any }>>('/manage/settings/payments', data),
+  updateNotifications: (data: any) => api.put<ApiResponse<{ notifications: any }>>('/manage/settings/notifications', data),
   getSubscription: () => api.get<ApiResponse<{ subscription: any }>>('/manage/settings/subscription'),
+};
+
+// Finances API
+export const financesApi = {
+  getSummary: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/finances/summary', { params: { from, to } }),
+
+  getTransactions: (params: { from?: string; to?: string; type?: string; staffId?: string; limit?: number; page?: number }) =>
+    api.get<ApiResponse<{ transactions: any[]; pagination: any }>>('/manage/finances/transactions', { params }),
+
+  createTransaction: (data: any) =>
+    api.post<ApiResponse<{ transaction: any }>>('/manage/finances/transactions', data),
+
+  getTransaction: (id: string) =>
+    api.get<ApiResponse<{ transaction: any }>>(`/manage/finances/transactions/${id}`),
+
+  // Reports
+  getDailyClose: (date?: string) =>
+    api.get<ApiResponse<any>>('/manage/finances/reports/daily-close', { params: { date } }),
+
+  getReportByService: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/finances/reports/by-service', { params: { from, to } }),
+
+  getReportByStaff: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/finances/reports/by-staff', { params: { from, to } }),
+
+  getReportByMethod: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/finances/reports/by-method', { params: { from, to } }),
+
+  exportReport: (data: any) =>
+    api.post<ApiResponse<{ url: string }>>('/manage/finances/reports/export', data),
+
+  // Expenses
+  getExpenses: (params?: { from?: string; to?: string; category?: string }) =>
+    api.get<ApiResponse<{ expenses: any[] }>>('/manage/expenses', { params }),
+
+  createExpense: (data: any) =>
+    api.post<ApiResponse<{ expense: any }>>('/manage/expenses', data),
+
+  updateExpense: (id: string, data: any) =>
+    api.put<ApiResponse<{ expense: any }>>(`/manage/expenses/${id}`, data),
+
+  deleteExpense: (id: string) =>
+    api.delete(`/manage/expenses/${id}`),
+
+  // POS
+  checkout: (data: any) =>
+    api.post<ApiResponse<{ transaction: any }>>('/manage/pos/checkout', data),
+
+  getPendingAppointments: () =>
+    api.get<ApiResponse<{ appointments: any[] }>>('/manage/pos/pending'),
+
+  quickSale: (data: any) =>
+    api.post<ApiResponse<{ transaction: any }>>('/manage/pos/quick-sale', data),
+
+  getReceipt: (transactionId: string) =>
+    api.get<ApiResponse<{ receipt: any }>>(`/manage/pos/receipt/${transactionId}`),
+
+  sendReceipt: (transactionId: string, data: { channel: 'email' | 'sms' | 'whatsapp' }) =>
+    api.post<ApiResponse<any>>(`/manage/pos/receipt/${transactionId}/send`, data),
+
+  // Cash Register
+  openCashRegister: (data: { initialAmount: number }) =>
+    api.post<ApiResponse<{ cashRegister: any }>>('/manage/pos/cash-register/open', data),
+
+  closeCashRegister: (data: { finalAmount: number; notes?: string }) =>
+    api.post<ApiResponse<{ cashRegister: any }>>('/manage/pos/cash-register/close', data),
+
+  getCashRegisterStatus: () =>
+    api.get<ApiResponse<{ cashRegister: any }>>('/manage/pos/cash-register'),
+};
+
+// Analytics API
+export const analyticsApi = {
+  getOverview: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/analytics/overview', { params: { from, to } }),
+
+  getOccupancy: (params: { from: string; to: string; staffId?: string }) =>
+    api.get<ApiResponse<any>>('/manage/analytics/occupancy', { params }),
+
+  getClients: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/analytics/clients', { params: { from, to } }),
+
+  getServices: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/analytics/services', { params: { from, to } }),
+
+  getStaff: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/analytics/staff', { params: { from, to } }),
+
+  getRevenue: (from: string, to: string) =>
+    api.get<ApiResponse<any>>('/manage/analytics/revenue', { params: { from, to } }),
+
+  getTrends: (period: 'week' | 'month' | 'year') =>
+    api.get<ApiResponse<any>>('/manage/analytics/trends', { params: { period } }),
+
+  getPredictions: () =>
+    api.get<ApiResponse<any>>('/manage/analytics/predictions'),
+};
+
+// Marketing API
+export const marketingApi = {
+  // Promotions
+  getPromotions: (params?: { status?: string }) =>
+    api.get<ApiResponse<{ promotions: any[] }>>('/manage/promotions', { params }),
+
+  getPromotion: (id: string) =>
+    api.get<ApiResponse<{ promotion: any }>>(`/manage/promotions/${id}`),
+
+  createPromotion: (data: any) =>
+    api.post<ApiResponse<{ promotion: any }>>('/manage/promotions', data),
+
+  updatePromotion: (id: string, data: any) =>
+    api.put<ApiResponse<{ promotion: any }>>(`/manage/promotions/${id}`, data),
+
+  deletePromotion: (id: string) =>
+    api.delete(`/manage/promotions/${id}`),
+
+  togglePromotionStatus: (id: string, status: 'active' | 'paused') =>
+    api.put<ApiResponse<{ promotion: any }>>(`/manage/promotions/${id}/status`, { status }),
+
+  // Campaigns
+  getCampaigns: (params?: { status?: string; type?: string }) =>
+    api.get<ApiResponse<{ campaigns: any[] }>>('/manage/campaigns', { params }),
+
+  getCampaign: (id: string) =>
+    api.get<ApiResponse<{ campaign: any }>>(`/manage/campaigns/${id}`),
+
+  createCampaign: (data: any) =>
+    api.post<ApiResponse<{ campaign: any }>>('/manage/campaigns', data),
+
+  updateCampaign: (id: string, data: any) =>
+    api.put<ApiResponse<{ campaign: any }>>(`/manage/campaigns/${id}`, data),
+
+  deleteCampaign: (id: string) =>
+    api.delete(`/manage/campaigns/${id}`),
+
+  sendCampaign: (id: string) =>
+    api.post<ApiResponse<{ campaign: any }>>(`/manage/campaigns/${id}/send`),
+
+  cancelCampaign: (id: string) =>
+    api.post<ApiResponse<{ campaign: any }>>(`/manage/campaigns/${id}/cancel`),
+
+  getCampaignStats: (id: string) =>
+    api.get<ApiResponse<any>>(`/manage/campaigns/${id}/stats`),
+
+  // Auto Notifications
+  getAutoNotifications: () =>
+    api.get<ApiResponse<{ config: any }>>('/manage/auto-notifications'),
+
+  updateAutoNotifications: (data: any) =>
+    api.put<ApiResponse<{ config: any }>>('/manage/auto-notifications', data),
+};
+
+// Reviews API
+export const reviewsApi = {
+  getStats: () =>
+    api.get<ApiResponse<any>>('/manage/reviews/stats'),
+
+  getAll: (params?: { page?: number; limit?: number; filter?: string; staffId?: string }) =>
+    api.get<ApiResponse<{ reviews: any[]; pagination: any }>>('/manage/reviews', { params }),
+
+  get: (id: string) =>
+    api.get<ApiResponse<{ review: any }>>(`/manage/reviews/${id}`),
+
+  respond: (id: string, text: string) =>
+    api.post<ApiResponse<{ review: any }>>(`/manage/reviews/${id}/respond`, { text }),
+
+  updateResponse: (id: string, text: string) =>
+    api.put<ApiResponse<{ review: any }>>(`/manage/reviews/${id}/respond`, { text }),
+
+  report: (id: string, reason: string) =>
+    api.post<ApiResponse<any>>(`/manage/reviews/${id}/report`, { reason }),
+};
+
+// Waitlist API
+export const waitlistApi = {
+  getAll: (params?: { status?: string }) =>
+    api.get<ApiResponse<{ waitlist: any[] }>>('/manage/waitlist', { params }),
+
+  create: (data: any) =>
+    api.post<ApiResponse<{ entry: any }>>('/manage/waitlist', data),
+
+  update: (id: string, data: any) =>
+    api.put<ApiResponse<{ entry: any }>>(`/manage/waitlist/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete(`/manage/waitlist/${id}`),
+
+  notify: (id: string) =>
+    api.post<ApiResponse<any>>(`/manage/waitlist/${id}/notify`),
+};
+
+// Notifications API
+export const notificationsApi = {
+  getAll: (params?: { page?: number; limit?: number; read?: boolean }) =>
+    api.get<ApiResponse<{ notifications: any[]; pagination: any; unreadCount: number }>>('/manage/notifications', { params }),
+
+  markAsRead: (id: string) =>
+    api.put<ApiResponse<any>>(`/manage/notifications/${id}/read`),
+
+  markAllAsRead: () =>
+    api.put<ApiResponse<any>>('/manage/notifications/read-all'),
+
+  getUnreadCount: () =>
+    api.get<ApiResponse<{ count: number }>>('/manage/notifications/unread-count'),
+};
+
+// Team API (for managing business users)
+export const teamApi = {
+  getAll: () =>
+    api.get<ApiResponse<{ members: any[] }>>('/manage/team'),
+
+  invite: (data: { email: string; role: string; permissions?: string[] }) =>
+    api.post<ApiResponse<{ invitation: any }>>('/manage/team/invite', data),
+
+  updateRole: (id: string, role: string, permissions?: string[]) =>
+    api.put<ApiResponse<{ member: any }>>(`/manage/team/${id}/role`, { role, permissions }),
+
+  remove: (id: string) =>
+    api.delete(`/manage/team/${id}`),
+
+  resendInvite: (id: string) =>
+    api.post<ApiResponse<any>>(`/manage/team/${id}/resend-invite`),
+};
+
+// Integrations API
+export const integrationsApi = {
+  getAll: () =>
+    api.get<ApiResponse<{ integrations: any[] }>>('/manage/integrations'),
+
+  connectGoogleCalendar: (authCode: string) =>
+    api.post<ApiResponse<any>>('/manage/integrations/google-calendar', { authCode }),
+
+  disconnectGoogleCalendar: () =>
+    api.delete('/manage/integrations/google-calendar'),
+
+  connectMercadoPago: (authCode: string) =>
+    api.post<ApiResponse<any>>('/manage/integrations/mercadopago', { authCode }),
+
+  disconnectMercadoPago: () =>
+    api.delete('/manage/integrations/mercadopago'),
+
+  testWebhook: (type: string) =>
+    api.post<ApiResponse<any>>('/manage/integrations/test-webhook', { type }),
 };
 
 export default api;
