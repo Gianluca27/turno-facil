@@ -129,6 +129,45 @@ export interface ISubscription {
   mercadoPagoSubscriptionId?: string;
 }
 
+export interface ITeamMember {
+  userId: mongoose.Types.ObjectId;
+  role: 'admin' | 'manager' | 'staff' | 'receptionist';
+  permissions: string[];
+  invitedAt?: Date;
+  joinedAt?: Date;
+  status?: string;
+}
+
+export interface IPendingInvitation {
+  _id?: mongoose.Types.ObjectId;
+  email: string;
+  role: string;
+  permissions: string[];
+  invitedBy: mongoose.Types.ObjectId;
+  invitedAt: Date;
+  status: string;
+  token: string;
+}
+
+export interface IIntegrations {
+  googleCalendar?: {
+    connected: boolean;
+    connectedAt?: Date;
+    accessToken?: string;
+    refreshToken?: string;
+    calendarId?: string;
+    syncEnabled?: boolean;
+  };
+  mercadoPago?: {
+    connected: boolean;
+    connectedAt?: Date;
+    accessToken?: string;
+    refreshToken?: string;
+    publicKey?: string;
+    userId?: string;
+  };
+}
+
 export interface IBusiness extends Document {
   _id: mongoose.Types.ObjectId;
   name: string;
@@ -147,6 +186,10 @@ export interface IBusiness extends Document {
   subscription: ISubscription;
   ownerId: mongoose.Types.ObjectId;
   status: 'pending' | 'active' | 'suspended' | 'deleted';
+  team?: ITeamMember[];
+  pendingInvitations?: IPendingInvitation[];
+  integrations?: IIntegrations;
+  webhookUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -381,6 +424,49 @@ const businessSchema = new Schema<IBusiness, IBusinessModel>(
       enum: ['pending', 'active', 'suspended', 'deleted'],
       default: 'pending',
       index: true,
+    },
+    team: [
+      {
+        userId: { type: Schema.Types.ObjectId, ref: 'BusinessUser', required: true },
+        role: { type: String, enum: ['admin', 'manager', 'staff', 'receptionist'], required: true },
+        permissions: [{ type: String }],
+        invitedAt: Date,
+        joinedAt: Date,
+        status: { type: String, default: 'active' },
+      },
+    ],
+    pendingInvitations: [
+      {
+        email: { type: String, required: true, lowercase: true },
+        role: { type: String, required: true },
+        permissions: [{ type: String }],
+        invitedBy: { type: Schema.Types.ObjectId, ref: 'BusinessUser' },
+        invitedAt: { type: Date, default: Date.now },
+        status: { type: String, default: 'pending' },
+        token: { type: String, required: true },
+      },
+    ],
+    integrations: {
+      googleCalendar: {
+        connected: { type: Boolean, default: false },
+        connectedAt: Date,
+        accessToken: String,
+        refreshToken: String,
+        calendarId: String,
+        syncEnabled: { type: Boolean, default: false },
+      },
+      mercadoPago: {
+        connected: { type: Boolean, default: false },
+        connectedAt: Date,
+        accessToken: String,
+        refreshToken: String,
+        publicKey: String,
+        userId: String,
+      },
+    },
+    webhookUrl: {
+      type: String,
+      trim: true,
     },
   },
   {
