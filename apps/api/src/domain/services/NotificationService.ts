@@ -315,6 +315,97 @@ class NotificationService {
     const result = await Notification.deleteOne({ _id: notificationId, userId });
     return result.deletedCount > 0;
   }
+
+  // Send payment confirmation notification
+  async sendPaymentConfirmation(params: {
+    userId: string;
+    businessId: string;
+    appointmentId: string;
+    amount: number;
+    type: 'deposit' | 'payment';
+  }): Promise<void> {
+    await this.sendNotification({
+      userId: params.userId,
+      type: 'payment_received',
+      channels: ['push', 'email'],
+      businessId: params.businessId,
+      appointmentId: params.appointmentId,
+      data: {
+        amount: params.amount,
+        paymentType: params.type,
+        formattedAmount: `$${params.amount.toLocaleString('es-AR')}`,
+      },
+    });
+
+    logger.info('Payment confirmation sent', {
+      userId: params.userId,
+      appointmentId: params.appointmentId,
+      amount: params.amount,
+    });
+  }
+
+  // Notify next person in waitlist when a slot becomes available
+  async notifyNextInWaitlist(
+    businessId: string,
+    appointmentId?: string
+  ): Promise<void> {
+    const { Waitlist } = await import('../../infrastructure/database/mongodb/models/Waitlist.js');
+    const { Business } = await import('../../infrastructure/database/mongodb/models/Business.js');
+
+    // Find the next active waitlist entry for this business
+    const nextInLine = await Waitlist.findOne({
+      businessId,
+      status: 'active',
+    })
+      .sort({ priority: -1, position: 1 })
+      .limit(1);
+
+    if (!nextInLine) {
+      logger.debug('No one in waitlist to notify', { businessId });
+      return;
+    }
+
+    const business = await Business.findById(businessId).select('name');
+
+    // Create notification for the waitlist entry
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes to respond
+
+    // Create notification entry
+    const notificationEntry: { sentAt: Date; expiresAt: Date; status: 'sent'; appointmentId?: any } = {
+      sentAt: new Date(),
+      expiresAt,
+      status: 'sent',
+    };
+
+    if (appointmentId) {
+      const mongoose = await import('mongoose');
+      notificationEntry.appointmentId = new mongoose.default.Types.ObjectId(appointmentId);
+    }
+
+    nextInLine.notifications.push(notificationEntry as any);
+
+    await nextInLine.save();
+
+    // Send push notification
+    await this.sendNotification({
+      userId: nextInLine.clientId.toString(),
+      type: 'waitlist_available',
+      channels: ['push', 'sms'],
+      businessId,
+      data: {
+        waitlistId: nextInLine._id.toString(),
+        businessName: business?.name || 'El negocio',
+        expiresAt: expiresAt.toISOString(),
+        message: `¡Hay un turno disponible en ${business?.name || 'el negocio'}! Tenés 30 minutos para confirmarlo.`,
+      },
+    });
+
+    logger.info('Waitlist notification sent', {
+      waitlistId: nextInLine._id,
+      userId: nextInLine.clientId,
+      businessId,
+    });
+  }
 }
 
 export const notificationService = new NotificationService();

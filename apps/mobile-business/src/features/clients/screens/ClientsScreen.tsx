@@ -55,7 +55,7 @@ export const ClientsScreen: React.FC = () => {
   } = useInfiniteQuery({
     queryKey: ['clients', currentBusiness?.businessId, searchQuery],
     queryFn: ({ pageParam = 1 }) =>
-      clientsApi.getAll({ page: pageParam, search: searchQuery, limit: 20 }),
+      clientsApi.list({ page: pageParam, q: searchQuery, limit: 20 }),
     getNextPageParam: (lastPage) => {
       const { pagination } = lastPage.data.data;
       return pagination.page < pagination.totalPages ? pagination.page + 1 : undefined;

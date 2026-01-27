@@ -21,6 +21,9 @@ import analyticsRoutes from './analytics.routes.js';
 import waitlistRoutes from './waitlist.routes.js';
 import posRoutes from './pos.routes.js';
 import reviewsRoutes from './reviews.routes.js';
+import notificationsRoutes from './notifications.routes.js';
+import teamRoutes from './team.routes.js';
+import integrationsRoutes from './integrations.routes.js';
 
 const router = Router();
 
@@ -65,5 +68,8 @@ router.use('/analytics', analyticsRoutes);
 router.use('/waitlist', waitlistRoutes);
 router.use('/pos', posRoutes);
 router.use('/reviews', reviewsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/team', teamRoutes);
+router.use('/integrations', integrationsRoutes);
 
 export default router;

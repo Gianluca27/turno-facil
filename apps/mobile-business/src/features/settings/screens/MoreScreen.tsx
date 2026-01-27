@@ -1,12 +1,17 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { Text, Card, Avatar, Divider, Switch, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { Text, Card, Avatar, Divider, ActivityIndicator, Badge } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuthStore, useCurrentBusiness } from '../../../shared/stores/authStore';
-import { businessApi } from '../../../services/api';
+import { businessApi, notificationsApi } from '../../../services/api';
 import { colors, spacing } from '../../../shared/theme';
+import type { RootStackParamList } from '../../../app/navigation/RootNavigator';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface MenuItem {
   icon: string;
@@ -15,6 +20,7 @@ interface MenuItem {
   onPress: () => void;
   rightElement?: React.ReactNode;
   color?: string;
+  badge?: number;
 }
 
 interface MenuSection {
@@ -23,16 +29,24 @@ interface MenuSection {
 }
 
 export const MoreScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
   const { user, logout } = useAuthStore();
   const currentBusiness = useCurrentBusiness();
 
   const { data: businessData, isLoading } = useQuery({
     queryKey: ['business', currentBusiness?.businessId],
-    queryFn: () => businessApi.getSettings(),
+    queryFn: () => businessApi.get(),
     enabled: !!currentBusiness,
   });
 
-  const business = businessData?.data?.data;
+  const { data: notificationsData } = useQuery({
+    queryKey: ['unread-notifications', currentBusiness?.businessId],
+    queryFn: () => notificationsApi.getUnreadCount(),
+    enabled: !!currentBusiness,
+  });
+
+  const business = businessData?.data?.data?.business;
+  const unreadCount = notificationsData?.data?.data?.count || 0;
 
   const handleLogout = () => {
     Alert.alert(
@@ -45,6 +59,32 @@ export const MoreScreen: React.FC = () => {
     );
   };
 
+  const handleSwitchBusiness = () => {
+    Alert.alert(
+      'Cambiar de Negocio',
+      'Esta función permite gestionar múltiples negocios desde una sola cuenta.',
+      [{ text: 'Entendido' }]
+    );
+  };
+
+  const handleSupport = () => {
+    Alert.alert(
+      'Ayuda y Soporte',
+      '¿Cómo deseas contactarnos?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'WhatsApp',
+          onPress: () => Linking.openURL('https://wa.me/5491155556789?text=Hola,%20necesito%20ayuda%20con%20TurnoFácil')
+        },
+        {
+          text: 'Email',
+          onPress: () => Linking.openURL('mailto:soporte@turnofacil.com?subject=Necesito%20ayuda')
+        },
+      ]
+    );
+  };
+
   const menuSections: MenuSection[] = [
     {
       title: 'Mi Negocio',
@@ -53,25 +93,25 @@ export const MoreScreen: React.FC = () => {
           icon: 'store-outline',
           label: 'Información del Negocio',
           description: 'Nombre, dirección, contacto',
-          onPress: () => {},
+          onPress: () => navigation.navigate('BusinessInfo'),
         },
         {
           icon: 'clock-outline',
           label: 'Horarios de Atención',
           description: 'Configura tus días y horas',
-          onPress: () => {},
+          onPress: () => navigation.navigate('BusinessSchedule'),
         },
         {
           icon: 'account-group-outline',
           label: 'Staff / Empleados',
           description: 'Gestiona tu equipo',
-          onPress: () => {},
+          onPress: () => navigation.navigate('Staff'),
         },
         {
           icon: 'calendar-cog',
           label: 'Configuración de Turnos',
           description: 'Reglas de reserva, cancelación',
-          onPress: () => {},
+          onPress: () => navigation.navigate('BookingSettings'),
         },
       ],
     },
@@ -82,19 +122,19 @@ export const MoreScreen: React.FC = () => {
           icon: 'cash-multiple',
           label: 'Historial de Transacciones',
           description: 'Ver ingresos y pagos',
-          onPress: () => {},
+          onPress: () => navigation.navigate('TransactionHistory'),
         },
         {
           icon: 'credit-card-outline',
           label: 'Métodos de Pago',
           description: 'Configura formas de cobro',
-          onPress: () => {},
+          onPress: () => navigation.navigate('PaymentSettings'),
         },
         {
           icon: 'chart-line',
           label: 'Reportes Financieros',
           description: 'Analiza tus ingresos',
-          onPress: () => {},
+          onPress: () => navigation.navigate('FinanceReports'),
         },
       ],
     },
@@ -103,21 +143,21 @@ export const MoreScreen: React.FC = () => {
       items: [
         {
           icon: 'sale',
-          label: 'Promociones',
-          description: 'Crea ofertas y descuentos',
-          onPress: () => {},
-        },
-        {
-          icon: 'email-outline',
-          label: 'Campañas',
-          description: 'Email y SMS marketing',
-          onPress: () => {},
+          label: 'Promociones y Campañas',
+          description: 'Crea ofertas y comunícate',
+          onPress: () => navigation.navigate('Marketing'),
         },
         {
           icon: 'star-outline',
           label: 'Reseñas',
           description: 'Gestiona opiniones de clientes',
-          onPress: () => {},
+          onPress: () => navigation.navigate('Reviews'),
+        },
+        {
+          icon: 'chart-areaspline',
+          label: 'Estadísticas',
+          description: 'Métricas y rendimiento',
+          onPress: () => navigation.navigate('Analytics'),
         },
       ],
     },
@@ -128,25 +168,38 @@ export const MoreScreen: React.FC = () => {
           icon: 'bell-outline',
           label: 'Notificaciones',
           description: 'Configura alertas',
-          onPress: () => {},
+          onPress: () => navigation.navigate('NotificationSettings'),
+          badge: unreadCount > 0 ? unreadCount : undefined,
         },
         {
           icon: 'palette-outline',
           label: 'Apariencia',
           description: 'Personaliza tu página',
-          onPress: () => {},
+          onPress: () => navigation.navigate('AppearanceSettings'),
         },
         {
           icon: 'shield-check-outline',
           label: 'Seguridad',
           description: 'Contraseña y accesos',
-          onPress: () => {},
+          onPress: () => navigation.navigate('SecuritySettings'),
+        },
+        {
+          icon: 'puzzle-outline',
+          label: 'Integraciones',
+          description: 'Google Calendar, MercadoPago',
+          onPress: () => navigation.navigate('Integrations'),
+        },
+        {
+          icon: 'account-multiple-outline',
+          label: 'Equipo',
+          description: 'Gestiona permisos y roles',
+          onPress: () => navigation.navigate('Team'),
         },
         {
           icon: 'help-circle-outline',
           label: 'Ayuda y Soporte',
           description: 'FAQ, contacto',
-          onPress: () => {},
+          onPress: handleSupport,
         },
       ],
     },
@@ -157,13 +210,19 @@ export const MoreScreen: React.FC = () => {
           icon: 'account-circle-outline',
           label: 'Mi Perfil',
           description: 'Editar datos personales',
-          onPress: () => {},
+          onPress: () => navigation.navigate('EditProfile'),
+        },
+        {
+          icon: 'crown-outline',
+          label: 'Suscripción',
+          description: 'Plan actual y facturación',
+          onPress: () => navigation.navigate('Subscription'),
         },
         {
           icon: 'swap-horizontal',
           label: 'Cambiar de Negocio',
           description: 'Si tienes múltiples negocios',
-          onPress: () => {},
+          onPress: handleSwitchBusiness,
         },
         {
           icon: 'logout',
@@ -178,7 +237,7 @@ export const MoreScreen: React.FC = () => {
   const renderMenuItem = (item: MenuItem, isLast: boolean) => (
     <View key={item.label}>
       <TouchableOpacity style={styles.menuItem} onPress={item.onPress}>
-        <View style={[styles.menuIcon, item.color && { backgroundColor: item.color + '15' }]}>
+        <View style={[styles.menuIcon, item.color ? { backgroundColor: item.color + '15' } : null]}>
           <Icon
             name={item.icon}
             size={22}
@@ -186,12 +245,19 @@ export const MoreScreen: React.FC = () => {
           />
         </View>
         <View style={styles.menuContent}>
-          <Text
-            variant="bodyLarge"
-            style={[styles.menuLabel, item.color && { color: item.color }]}
-          >
-            {item.label}
-          </Text>
+          <View style={styles.menuLabelRow}>
+            <Text
+              variant="bodyLarge"
+              style={[styles.menuLabel, item.color ? { color: item.color } : null]}
+            >
+              {item.label}
+            </Text>
+            {item.badge && (
+              <Badge size={20} style={styles.badge}>
+                {item.badge}
+              </Badge>
+            )}
+          </View>
           {item.description && (
             <Text variant="bodySmall" style={styles.menuDescription}>
               {item.description}
@@ -232,7 +298,10 @@ export const MoreScreen: React.FC = () => {
       {/* Business Profile Header */}
       <Card style={styles.profileCard}>
         <Card.Content style={styles.profileContent}>
-          <View style={styles.profileAvatar}>
+          <TouchableOpacity
+            style={styles.profileAvatar}
+            onPress={() => navigation.navigate('BusinessInfo')}
+          >
             {business?.logo ? (
               <Avatar.Image size={70} source={{ uri: business.logo }} />
             ) : (
@@ -242,7 +311,10 @@ export const MoreScreen: React.FC = () => {
                 style={{ backgroundColor: colors.primary }}
               />
             )}
-          </View>
+            <View style={styles.editBadge}>
+              <Icon name="pencil" size={12} color={colors.background} />
+            </View>
+          </TouchableOpacity>
           <View style={styles.profileInfo}>
             <Text variant="titleLarge" style={styles.businessName}>
               {business?.name || 'Mi Negocio'}
@@ -270,9 +342,12 @@ export const MoreScreen: React.FC = () => {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.profileStat}>
-                <Text variant="titleMedium" style={styles.statNumber}>
-                  {business?.rating?.toFixed(1) || '0.0'}
-                </Text>
+                <View style={styles.ratingRow}>
+                  <Text variant="titleMedium" style={styles.statNumber}>
+                    {business?.rating?.toFixed(1) || '0.0'}
+                  </Text>
+                  <Icon name="star" size={14} color="#F59E0B" />
+                </View>
                 <Text variant="bodySmall" style={styles.statLabel}>
                   Rating
                 </Text>
@@ -284,28 +359,30 @@ export const MoreScreen: React.FC = () => {
 
       {/* User Info */}
       <Card style={styles.userCard}>
-        <Card.Content style={styles.userContent}>
-          <Avatar.Text
-            size={40}
-            label={`${user?.firstName?.charAt(0) || ''}${user?.lastName?.charAt(0) || ''}`}
-            style={{ backgroundColor: colors.secondary }}
-          />
-          <View style={styles.userInfo}>
-            <Text variant="titleMedium" style={styles.userName}>
-              {user?.firstName} {user?.lastName}
-            </Text>
-            <Text variant="bodySmall" style={styles.userEmail}>
-              {user?.email}
-            </Text>
-          </View>
-          <View style={styles.roleChip}>
-            <Text variant="labelSmall" style={styles.roleText}>
-              {currentBusiness?.role === 'owner' ? 'Propietario' :
-               currentBusiness?.role === 'admin' ? 'Administrador' :
-               currentBusiness?.role || 'Usuario'}
-            </Text>
-          </View>
-        </Card.Content>
+        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')}>
+          <Card.Content style={styles.userContent}>
+            <Avatar.Text
+              size={40}
+              label={`${user?.profile?.firstName?.charAt(0) || ''}${user?.profile?.lastName?.charAt(0) || ''}`}
+              style={{ backgroundColor: colors.secondary }}
+            />
+            <View style={styles.userInfo}>
+              <Text variant="titleMedium" style={styles.userName}>
+                {user?.profile?.firstName} {user?.profile?.lastName}
+              </Text>
+              <Text variant="bodySmall" style={styles.userEmail}>
+                {user?.email}
+              </Text>
+            </View>
+            <View style={styles.roleChip}>
+              <Text variant="labelSmall" style={styles.roleText}>
+                {currentBusiness?.role === 'owner' ? 'Propietario' :
+                 currentBusiness?.role === 'admin' ? 'Administrador' :
+                 currentBusiness?.role || 'Usuario'}
+              </Text>
+            </View>
+          </Card.Content>
+        </TouchableOpacity>
       </Card>
 
       {/* Menu Sections */}
@@ -315,6 +392,9 @@ export const MoreScreen: React.FC = () => {
       <View style={styles.footer}>
         <Text variant="bodySmall" style={styles.versionText}>
           TurnoFácil para Negocios v1.0.0
+        </Text>
+        <Text variant="labelSmall" style={styles.copyrightText}>
+          © 2024 TurnoFácil. Todos los derechos reservados.
         </Text>
       </View>
     </ScrollView>
@@ -345,6 +425,20 @@ const styles = StyleSheet.create({
   },
   profileAvatar: {
     marginRight: spacing.md,
+    position: 'relative',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.background,
   },
   profileInfo: {
     flex: 1,
@@ -369,6 +463,11 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     color: colors.textSecondary,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   statDivider: {
     width: 1,
@@ -435,8 +534,16 @@ const styles = StyleSheet.create({
   menuContent: {
     flex: 1,
   },
+  menuLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   menuLabel: {
     fontWeight: '500',
+  },
+  badge: {
+    backgroundColor: colors.error,
   },
   menuDescription: {
     color: colors.textSecondary,
@@ -451,5 +558,10 @@ const styles = StyleSheet.create({
   },
   versionText: {
     color: colors.textTertiary,
+  },
+  copyrightText: {
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
+    fontSize: 11,
   },
 });

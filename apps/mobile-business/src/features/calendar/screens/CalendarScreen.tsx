@@ -42,7 +42,7 @@ export const CalendarScreen: React.FC = () => {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['appointments', currentBusiness?.businessId, format(selectedDate, 'yyyy-MM-dd')],
-    queryFn: () => appointmentsApi.getAll({ date: format(selectedDate, 'yyyy-MM-dd') }),
+    queryFn: () => appointmentsApi.list({ date: format(selectedDate, 'yyyy-MM-dd') }),
     enabled: !!currentBusiness,
   });
 
