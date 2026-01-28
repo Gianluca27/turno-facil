@@ -15,11 +15,14 @@ import {
   IconButton,
 } from 'react-native-paper';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { servicesApi } from '../../../services/api';
 import { colors, spacing } from '../../../shared/theme';
 import { useCurrentBusiness } from '../../../shared/stores/authStore';
+import { RootStackParamList } from '../../../app/navigation/RootNavigator';
 
 interface Service {
   _id: string;
@@ -38,6 +41,7 @@ interface Service {
 }
 
 export const ServicesScreen: React.FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const currentBusiness = useCurrentBusiness();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,7 +305,6 @@ export const ServicesScreen: React.FC = () => {
                 mode="outlined"
                 icon="trash-can-outline"
                 onPress={() => {
-                  // Handle delete
                   setSelectedService(null);
                 }}
                 style={styles.modalActionButton}
@@ -313,8 +316,9 @@ export const ServicesScreen: React.FC = () => {
                 mode="contained"
                 icon="pencil"
                 onPress={() => {
-                  // Navigate to edit service
+                  const serviceId = selectedService._id;
                   setSelectedService(null);
+                  navigation.navigate('EditService', { serviceId });
                 }}
                 style={styles.modalActionButton}
               >
@@ -342,7 +346,7 @@ export const ServicesScreen: React.FC = () => {
         <Button
           mode="contained"
           icon="plus"
-          onPress={() => {}}
+          onPress={() => navigation.navigate('CreateService', {})}
           style={styles.emptyButton}
         >
           Agregar Servicio
@@ -387,9 +391,7 @@ export const ServicesScreen: React.FC = () => {
       <FAB
         icon="plus"
         style={styles.fab}
-        onPress={() => {
-          // Navigate to create service
-        }}
+        onPress={() => navigation.navigate('CreateService', {})}
       />
     </View>
   );

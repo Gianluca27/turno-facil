@@ -14,10 +14,18 @@ import { MainTabNavigator } from './MainTabNavigator';
 
 // Feature screens
 import { StaffScreen } from '../../features/staff/screens/StaffScreen';
+import { CreateStaffScreen } from '../../features/staff/screens/CreateStaffScreen';
+import { EditStaffScreen } from '../../features/staff/screens/EditStaffScreen';
+import { StaffScheduleScreen } from '../../features/staff/screens/StaffScheduleScreen';
 import { FinancesScreen } from '../../features/finances/screens/FinancesScreen';
 import { MarketingScreen } from '../../features/marketing/screens/MarketingScreen';
 import { AnalyticsScreen } from '../../features/analytics/screens/AnalyticsScreen';
 import { ReviewsScreen } from '../../features/reviews/screens/ReviewsScreen';
+import { CreateAppointmentScreen } from '../../features/appointments/screens/CreateAppointmentScreen';
+import { AppointmentDetailScreen } from '../../features/appointments/screens/AppointmentDetailScreen';
+import { CreateServiceScreen } from '../../features/services/screens/CreateServiceScreen';
+import { EditServiceScreen } from '../../features/services/screens/EditServiceScreen';
+import { ClientDetailScreen } from '../../features/clients/screens/ClientDetailScreen';
 
 export type RootStackParamList = {
   // Auth
@@ -197,6 +205,54 @@ export const RootNavigator: React.FC = () => {
             name="Reviews"
             component={ReviewsScreen}
             options={{ ...screenOptions, title: 'Reseñas' }}
+          />
+
+          {/* Appointment Screens */}
+          <Stack.Screen
+            name="CreateAppointment"
+            component={CreateAppointmentScreen}
+            options={{ ...screenOptions, title: 'Nuevo Turno', headerShown: false }}
+          />
+          <Stack.Screen
+            name="AppointmentDetail"
+            component={AppointmentDetailScreen}
+            options={{ ...screenOptions, title: 'Detalle del Turno' }}
+          />
+
+          {/* Staff Management Screens */}
+          <Stack.Screen
+            name="CreateStaff"
+            component={CreateStaffScreen}
+            options={{ ...screenOptions, title: 'Nuevo Empleado' }}
+          />
+          <Stack.Screen
+            name="EditStaff"
+            component={EditStaffScreen}
+            options={{ ...screenOptions, title: 'Editar Empleado' }}
+          />
+          <Stack.Screen
+            name="StaffSchedule"
+            component={StaffScheduleScreen}
+            options={{ ...screenOptions, title: 'Horario de Trabajo' }}
+          />
+
+          {/* Service Management Screens */}
+          <Stack.Screen
+            name="CreateService"
+            component={CreateServiceScreen}
+            options={{ ...screenOptions, title: 'Nuevo Servicio' }}
+          />
+          <Stack.Screen
+            name="EditService"
+            component={EditServiceScreen}
+            options={{ ...screenOptions, title: 'Editar Servicio' }}
+          />
+
+          {/* Client Screens */}
+          <Stack.Screen
+            name="ClientDetail"
+            component={ClientDetailScreen}
+            options={{ ...screenOptions, title: 'Cliente' }}
           />
         </>
       )}
