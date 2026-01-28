@@ -14,6 +14,8 @@ import {
   Divider,
 } from 'react-native-paper';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -21,6 +23,7 @@ import { es } from 'date-fns/locale';
 import { clientsApi } from '../../../services/api';
 import { colors, spacing } from '../../../shared/theme';
 import { useCurrentBusiness } from '../../../shared/stores/authStore';
+import { RootStackParamList } from '../../../app/navigation/RootNavigator';
 
 interface Client {
   _id: string;
@@ -40,6 +43,7 @@ interface Client {
 }
 
 export const ClientsScreen: React.FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const currentBusiness = useCurrentBusiness();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -290,8 +294,9 @@ export const ClientsScreen: React.FC = () => {
                 mode="outlined"
                 icon="calendar-plus"
                 onPress={() => {
-                  // Navigate to create appointment with client
+                  const clientId = selectedClient._id;
                   setSelectedClient(null);
+                  navigation.navigate('CreateAppointment', { clientId });
                 }}
                 style={styles.modalActionButton}
               >
@@ -301,8 +306,9 @@ export const ClientsScreen: React.FC = () => {
                 mode="contained"
                 icon="account-details"
                 onPress={() => {
-                  // Navigate to client detail
+                  const clientId = selectedClient._id;
                   setSelectedClient(null);
+                  navigation.navigate('ClientDetail', { clientId });
                 }}
                 style={styles.modalActionButton}
               >

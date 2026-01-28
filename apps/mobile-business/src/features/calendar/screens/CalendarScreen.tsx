@@ -2,6 +2,8 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Card, Chip, FAB, ActivityIndicator, Portal, Modal, Button, SegmentedButtons } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format, addDays, startOfWeek, isSameDay, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -9,6 +11,7 @@ import { es } from 'date-fns/locale';
 import { appointmentsApi } from '../../../services/api';
 import { colors, spacing, getStatusColor, getStatusLabel } from '../../../shared/theme';
 import { useCurrentBusiness } from '../../../shared/stores/authStore';
+import { RootStackParamList } from '../../../app/navigation/RootNavigator';
 
 type ViewMode = 'day' | 'week' | 'list';
 
@@ -32,6 +35,7 @@ interface Appointment {
 }
 
 export const CalendarScreen: React.FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const currentBusiness = useCurrentBusiness();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -282,8 +286,9 @@ export const CalendarScreen: React.FC = () => {
               <Button
                 mode="contained"
                 onPress={() => {
-                  // Navigate to appointment detail
+                  const appointmentId = selectedAppointment._id;
                   setSelectedAppointment(null);
+                  navigation.navigate('AppointmentDetail', { appointmentId });
                 }}
                 style={styles.modalButton}
               >
@@ -345,9 +350,7 @@ export const CalendarScreen: React.FC = () => {
       <FAB
         icon="plus"
         style={styles.fab}
-        onPress={() => {
-          // Navigate to create appointment
-        }}
+        onPress={() => navigation.navigate('CreateAppointment', { date: format(selectedDate, 'yyyy-MM-dd') })}
       />
     </View>
   );
