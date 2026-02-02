@@ -130,9 +130,7 @@ export const CreateStaffScreen: React.FC = () => {
     if (phone && phone.length < 8) {
       newErrors.phone = 'Teléfono inválido';
     }
-    if (selectedServices.length === 0) {
-      newErrors.services = 'Selecciona al menos un servicio';
-    }
+    // Services selection is optional - can be assigned later
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -147,7 +145,7 @@ export const CreateStaffScreen: React.FC = () => {
         lastName: lastName.trim(),
       },
       role,
-      serviceIds: selectedServices,
+      services: selectedServices,
     };
 
     if (email) data.profile.email = email.trim();
@@ -276,7 +274,7 @@ export const CreateStaffScreen: React.FC = () => {
         {/* Services */}
         <View style={styles.servicesHeader}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            Servicios Asignados *
+            Servicios Asignados
           </Text>
           <View style={styles.servicesActions}>
             <Button

@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "TurnoFácil",
+    "slug": "turnofacil-client",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.turnofacil.client"
+    },
+    "android": {
+      "package": "com.turnofacil.client"
+    }
+  }
+}

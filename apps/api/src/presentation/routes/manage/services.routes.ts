@@ -4,6 +4,7 @@ import { requirePermission, BusinessAuthenticatedRequest } from '../../middlewar
 import { asyncHandler, NotFoundError } from '../../middleware/errorHandler.js';
 import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
 import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
+import { Staff } from '../../../infrastructure/database/mongodb/models/Staff.js';
 
 const router = Router();
 
@@ -11,6 +12,7 @@ const serviceSchema = z.object({
   name: z.string().min(2).max(100),
   description: z.string().max(500).optional(),
   categoryId: z.string().optional(),
+  category: z.string().optional(), // For backward compatibility
   duration: z.number().min(5).max(480),
   price: z.number().min(0),
   config: z.object({
@@ -21,6 +23,7 @@ const serviceSchema = z.object({
     allowOnlineBooking: z.boolean().default(true),
   }).optional(),
   image: z.string().optional(),
+  staffIds: z.array(z.string()).optional(), // Staff to assign this service to
 });
 
 // GET /api/v1/manage/services - List services
@@ -42,15 +45,24 @@ router.post(
   '/',
   requirePermission('services:create'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const data = serviceSchema.parse(req.body);
+    const { staffIds, ...serviceData } = serviceSchema.parse(req.body);
+    const businessId = req.currentBusiness!.businessId;
 
     const service = new Service({
-      ...data,
-      businessId: req.currentBusiness!.businessId,
+      ...serviceData,
+      businessId,
       status: 'active',
     });
 
     await service.save();
+
+    // If staffIds provided, assign this service to those staff members
+    if (staffIds && staffIds.length > 0) {
+      await Staff.updateMany(
+        { _id: { $in: staffIds }, businessId },
+        { $addToSet: { services: service._id } }
+      );
+    }
 
     res.status(201).json({ success: true, data: { service } });
   })

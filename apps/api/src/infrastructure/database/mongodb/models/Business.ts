@@ -237,8 +237,8 @@ const businessSchema = new Schema<IBusiness, IBusinessModel>(
       },
       phone: {
         type: String,
-        required: true,
         trim: true,
+        default: '',
       },
       whatsapp: String,
       website: String,
@@ -251,15 +251,15 @@ const businessSchema = new Schema<IBusiness, IBusinessModel>(
     location: {
       address: {
         type: String,
-        required: true,
+        default: '',
       },
       city: {
         type: String,
-        required: true,
+        default: '',
       },
       state: {
         type: String,
-        required: true,
+        default: '',
       },
       country: {
         type: String,

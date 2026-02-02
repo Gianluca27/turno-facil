@@ -288,6 +288,7 @@ export const RegisterScreen: React.FC = () => {
         {registerMutation.isError && (
           <HelperText type="error" style={styles.errorText}>
             {(registerMutation.error as any)?.response?.data?.error?.message ||
+              (registerMutation.error as any)?.message ||
               'Error al registrar. Intenta nuevamente.'}
           </HelperText>
         )}

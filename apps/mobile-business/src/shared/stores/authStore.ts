@@ -1,8 +1,5 @@
 import { create } from 'zustand';
-import { MMKV } from 'react-native-mmkv';
-
-// Initialize MMKV storage
-const storage = new MMKV({ id: 'auth-storage' });
+import { authStorage as storage } from '../utils/storage';
 
 interface Business {
   businessId: string;
@@ -52,6 +49,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
+      // Wait for storage to be ready
+      await storage.waitForInit();
+
       // Restore auth state from storage
       const storedUser = storage.getString('user');
       const storedTokens = storage.getString('tokens');

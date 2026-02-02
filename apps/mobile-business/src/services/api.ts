@@ -1,11 +1,10 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { MMKV } from 'react-native-mmkv';
+import { authStorage as storage } from '../shared/utils/storage';
 
 // Configuration
-const API_URL = __DEV__ ? 'http://localhost:3000/api/v1' : 'https://api.turnofacil.com/api/v1';
-
-// Storage for tokens
-const storage = new MMKV({ id: 'auth-storage' });
+// Use your local IP for development (run ipconfig to find it)
+const DEV_API_HOST = '192.168.100.2';
+const API_URL = __DEV__ ? `http://${DEV_API_HOST}:3000/api/v1` : 'https://api.turnofacil.com/api/v1';
 
 // Create axios instance
 const api: AxiosInstance = axios.create({

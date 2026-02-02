@@ -1,11 +1,10 @@
 import { io, Socket } from 'socket.io-client';
-import { MMKV } from 'react-native-mmkv';
+import { authStorage as storage } from '../shared/utils/storage';
 
 // Configuration
-const WS_URL = __DEV__ ? 'http://localhost:3000/business' : 'https://api.turnofacil.com/business';
-
-// Storage
-const storage = new MMKV({ id: 'auth-storage' });
+// Use your local IP for development (run ipconfig to find it)
+const DEV_API_HOST = '192.168.100.2';
+const WS_URL = __DEV__ ? `http://${DEV_API_HOST}:3000/business` : 'https://api.turnofacil.com/business';
 
 // Socket instance
 let socket: Socket | null = null;

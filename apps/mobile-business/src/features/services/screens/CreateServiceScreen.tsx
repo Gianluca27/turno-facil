@@ -126,9 +126,7 @@ export const CreateServiceScreen: React.FC = () => {
     if (requiresDeposit && parseFloat(depositAmount) > parseFloat(price)) {
       newErrors.depositAmount = 'La seña no puede ser mayor al precio';
     }
-    if (selectedStaff.length === 0) {
-      newErrors.staff = 'Selecciona al menos un profesional';
-    }
+    // Staff selection is optional - can be assigned later
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -372,7 +370,7 @@ export const CreateServiceScreen: React.FC = () => {
         {/* Staff Assignment */}
         <View style={styles.staffHeader}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            Profesionales Asignados *
+            Profesionales Asignados
           </Text>
           <Button mode="text" compact onPress={selectAllStaff}>
             Seleccionar todos
