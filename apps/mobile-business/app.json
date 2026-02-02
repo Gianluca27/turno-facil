@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "TurnoFácil Business",
+    "slug": "turnofacil-business",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.turnofacil.business"
+    },
+    "android": {
+      "package": "com.turnofacil.business"
+    }
+  }
+}

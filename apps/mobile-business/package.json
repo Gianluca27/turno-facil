@@ -1,6 +1,7 @@
 {
   "name": "@turnofacil/mobile-business",
   "version": "1.0.0",
+  "main": "index.js",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
