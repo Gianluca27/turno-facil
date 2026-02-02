@@ -3,11 +3,12 @@ version: '3.8'
 services:
   api:
     build:
-      context: ../apps/api
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: apps/api/Dockerfile
     container_name: turnofacil-api
+    working_dir: /app/apps/api
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - NODE_ENV=development
       - PORT=3000
@@ -21,7 +22,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ../apps/api:/app
+      - ..:/app
       - /app/node_modules
     networks:
       - turnofacil-network
@@ -29,9 +30,10 @@ services:
 
   worker:
     build:
-      context: ../apps/api
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: apps/api/Dockerfile
     container_name: turnofacil-worker
+    working_dir: /app/apps/api
     command: npm run worker
     environment:
       - NODE_ENV=development
@@ -41,7 +43,7 @@ services:
       - mongo
       - redis
     volumes:
-      - ../apps/api:/app
+      - ..:/app
       - /app/node_modules
     networks:
       - turnofacil-network
@@ -51,7 +53,7 @@ services:
     image: mongo:7
     container_name: turnofacil-mongo
     ports:
-      - "27017:27017"
+      - '27017:27017'
     environment:
       - MONGO_INITDB_DATABASE=turnofacil
     volumes:
@@ -60,7 +62,7 @@ services:
     networks:
       - turnofacil-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,14 +72,14 @@ services:
     image: redis:7-alpine
     container_name: turnofacil-redis
     ports:
-      - "6379:6379"
+      - '6379:6379'
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     networks:
       - turnofacil-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -89,7 +91,7 @@ services:
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
-      - "8081:8081"
+      - '8081:8081'
     depends_on:
       - redis
     networks:
@@ -101,7 +103,7 @@ services:
     image: mongo-express:latest
     container_name: turnofacil-mongo-express
     ports:
-      - "8082:8081"
+      - '8082:8081'
     environment:
       - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
       - ME_CONFIG_BASICAUTH_USERNAME=admin
