@@ -251,13 +251,16 @@ export const financesApi = {
     api.delete(`/manage/expenses/${id}`),
 
   // POS
-  checkout: (data: any) =>
-    api.post<ApiResponse<{ transaction: any }>>('/manage/pos/checkout', data),
+  checkout: (appointmentId: string, data: any) =>
+    api.post<ApiResponse<{ transaction: any }>>(`/manage/pos/checkout-appointment/${appointmentId}`, data),
 
   getPendingAppointments: () =>
-    api.get<ApiResponse<{ appointments: any[] }>>('/manage/pos/pending'),
+    api.get<ApiResponse<{ appointments: any[] }>>('/manage/pos/pending-appointments'),
 
-  quickSale: (data: any) =>
+  createSale: (data: any) =>
+    api.post<ApiResponse<{ transaction: any }>>('/manage/pos/sales', data),
+
+  quickSale: (data: { amount: number; description?: string; paymentMethod: string }) =>
     api.post<ApiResponse<{ transaction: any }>>('/manage/pos/quick-sale', data),
 
   getReceipt: (transactionId: string) =>

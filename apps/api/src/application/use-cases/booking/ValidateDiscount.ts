@@ -29,9 +29,10 @@ export async function validateDiscount(
     validFrom: { $lte: now },
     validUntil: { $gte: now },
     $or: [
-      { maxUses: { $exists: false } },
-      { maxUses: null },
-      { $expr: { $lt: ['$currentUses', '$maxUses'] } },
+      { 'limits.totalUses': { $exists: false } },
+      { 'limits.totalUses': null },
+      { 'limits.totalUses': 0 },
+      { $expr: { $lt: ['$limits.currentUses', '$limits.totalUses'] } },
     ],
   });
 

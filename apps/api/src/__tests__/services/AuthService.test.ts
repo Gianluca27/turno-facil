@@ -41,33 +41,40 @@ jest.mock('../../utils/logger', () => ({
   },
 }));
 
+// Chainable query mock helper: supports .select(), .populate(), etc.
+function createChainableMock(resolveFn: jest.Mock) {
+  const chain = {
+    select: jest.fn().mockImplementation(() => resolveFn()),
+    populate: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockImplementation(() => resolveFn()),
+    then: (onFulfilled: any, onRejected?: any) => resolveFn().then(onFulfilled, onRejected),
+  };
+  return chain;
+}
+
 // Mock User model
 const mockUserFindByIdAndUpdate = jest.fn().mockResolvedValue(null);
-const mockUserFindOne = jest.fn().mockResolvedValue(null);
-const mockUserFindById = jest.fn().mockResolvedValue(null);
+const mockUserFindOneResult = jest.fn().mockResolvedValue(null);
+const mockUserFindByIdResult = jest.fn().mockResolvedValue(null);
 
 jest.mock('../../infrastructure/database/mongodb/models/User', () => ({
   User: {
     findByIdAndUpdate: (...args: any[]) => mockUserFindByIdAndUpdate(...args),
-    findOne: (...args: any[]) => mockUserFindOne(...args),
-    findById: (...args: any[]) => ({
-      select: (fields: string) => mockUserFindById(fields),
-    }),
+    findOne: jest.fn().mockImplementation(() => createChainableMock(mockUserFindOneResult)),
+    findById: jest.fn().mockImplementation(() => createChainableMock(mockUserFindByIdResult)),
   },
 }));
 
 // Mock BusinessUser model
 const mockBusinessUserFindByIdAndUpdate = jest.fn().mockResolvedValue(null);
-const mockBusinessUserFindOne = jest.fn().mockResolvedValue(null);
-const mockBusinessUserFindById = jest.fn().mockResolvedValue(null);
+const mockBusinessUserFindOneResult = jest.fn().mockResolvedValue(null);
+const mockBusinessUserFindByIdResult = jest.fn().mockResolvedValue(null);
 
 jest.mock('../../infrastructure/database/mongodb/models/BusinessUser', () => ({
   BusinessUser: {
     findByIdAndUpdate: (...args: any[]) => mockBusinessUserFindByIdAndUpdate(...args),
-    findOne: (...args: any[]) => mockBusinessUserFindOne(...args),
-    findById: (...args: any[]) => ({
-      select: (fields: string) => mockBusinessUserFindById(fields),
-    }),
+    findOne: jest.fn().mockImplementation(() => createChainableMock(mockBusinessUserFindOneResult)),
+    findById: jest.fn().mockImplementation(() => createChainableMock(mockBusinessUserFindByIdResult)),
   },
 }));
 
@@ -77,6 +84,10 @@ import { authService } from '../../domain/services/AuthService';
 describe('AuthService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUserFindOneResult.mockResolvedValue(null);
+    mockUserFindByIdResult.mockResolvedValue(null);
+    mockBusinessUserFindOneResult.mockResolvedValue(null);
+    mockBusinessUserFindByIdResult.mockResolvedValue(null);
   });
 
   describe('generateTokens', () => {
@@ -142,6 +153,120 @@ describe('AuthService', () => {
     });
   });
 
+  describe('loginUser', () => {
+    it('should throw UnauthorizedError when user not found', async () => {
+      mockUserFindOneResult.mockResolvedValueOnce(null);
+
+      await expect(
+        authService.loginUser('notfound@test.com', 'password'),
+      ).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should throw UnauthorizedError when account is not active', async () => {
+      mockUserFindOneResult.mockResolvedValueOnce({
+        status: 'suspended',
+        password: 'hashed',
+      });
+
+      await expect(
+        authService.loginUser('suspended@test.com', 'password'),
+      ).rejects.toThrow('Account is not active');
+    });
+
+    it('should throw UnauthorizedError when password is null (social account)', async () => {
+      mockUserFindOneResult.mockResolvedValueOnce({
+        status: 'active',
+        password: null,
+      });
+
+      await expect(
+        authService.loginUser('social@test.com', 'password'),
+      ).rejects.toThrow('Please login with your social account');
+    });
+
+    it('should throw UnauthorizedError when password is wrong', async () => {
+      mockUserFindOneResult.mockResolvedValueOnce({
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        status: 'active',
+        password: 'hashed',
+        email: 'test@test.com',
+        comparePassword: jest.fn().mockResolvedValue(false),
+      });
+
+      await expect(
+        authService.loginUser('test@test.com', 'wrongpass'),
+      ).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should return user and tokens on successful login', async () => {
+      const mockUser = {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        status: 'active',
+        password: 'hashed',
+        email: 'test@test.com',
+        comparePassword: jest.fn().mockResolvedValue(true),
+      };
+      mockUserFindOneResult.mockResolvedValueOnce(mockUser);
+
+      const result = await authService.loginUser('test@test.com', 'correct');
+
+      expect(result.user).toBe(mockUser);
+      expect(result.tokens).toHaveProperty('accessToken');
+      expect(result.tokens).toHaveProperty('refreshToken');
+    });
+  });
+
+  describe('loginBusinessUser', () => {
+    it('should throw UnauthorizedError when user not found', async () => {
+      mockBusinessUserFindOneResult.mockResolvedValueOnce(null);
+
+      await expect(
+        authService.loginBusinessUser('notfound@biz.com', 'password'),
+      ).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should throw UnauthorizedError when password is null', async () => {
+      mockBusinessUserFindOneResult.mockResolvedValueOnce({
+        status: 'active',
+        password: null,
+      });
+
+      await expect(
+        authService.loginBusinessUser('social@biz.com', 'password'),
+      ).rejects.toThrow('Please login with your social account');
+    });
+
+    it('should throw UnauthorizedError when password is wrong', async () => {
+      mockBusinessUserFindOneResult.mockResolvedValueOnce({
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        status: 'active',
+        password: 'hashed',
+        email: 'biz@test.com',
+        comparePassword: jest.fn().mockResolvedValue(false),
+      });
+
+      await expect(
+        authService.loginBusinessUser('biz@test.com', 'wrong'),
+      ).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should return user and tokens on success', async () => {
+      const mockUser = {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        status: 'active',
+        password: 'hashed',
+        email: 'biz@test.com',
+        comparePassword: jest.fn().mockResolvedValue(true),
+      };
+      mockBusinessUserFindOneResult.mockResolvedValueOnce(mockUser);
+
+      const result = await authService.loginBusinessUser('biz@test.com', 'correct');
+
+      expect(result.user).toBe(mockUser);
+      expect(result.tokens).toHaveProperty('accessToken');
+    });
+  });
+
   describe('revokeToken', () => {
     it('should blacklist token in Redis', async () => {
       const userId = '507f1f77bcf86cd799439011';
@@ -197,7 +322,7 @@ describe('AuthService', () => {
 
   describe('changePassword', () => {
     it('should throw BadRequestError when user not found', async () => {
-      mockUserFindById.mockResolvedValueOnce(null);
+      mockUserFindByIdResult.mockResolvedValueOnce(null);
 
       await expect(
         authService.changePassword('nonexistent', 'old', 'new', 'user'),
@@ -205,7 +330,7 @@ describe('AuthService', () => {
     });
 
     it('should throw BadRequestError when no password is set', async () => {
-      mockUserFindById.mockResolvedValueOnce({
+      mockUserFindByIdResult.mockResolvedValueOnce({
         password: null,
         comparePassword: jest.fn(),
         save: jest.fn(),
@@ -217,7 +342,7 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedError when current password is wrong', async () => {
-      mockUserFindById.mockResolvedValueOnce({
+      mockUserFindByIdResult.mockResolvedValueOnce({
         password: 'hashed',
         comparePassword: jest.fn().mockResolvedValue(false),
         save: jest.fn(),
@@ -235,7 +360,7 @@ describe('AuthService', () => {
         comparePassword: jest.fn().mockResolvedValue(true),
         save: mockSave,
       };
-      mockUserFindById.mockResolvedValueOnce(mockUser);
+      mockUserFindByIdResult.mockResolvedValueOnce(mockUser);
 
       await authService.changePassword('user1', 'correct', 'newpass', 'user');
 

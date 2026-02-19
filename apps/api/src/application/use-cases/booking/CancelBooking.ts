@@ -47,10 +47,18 @@ export async function cancelBooking(input: CancelBookingInput): Promise<CancelBo
 
     if (hoursUntilAppointment < business.bookingConfig.cancellationPolicy.hoursBeforeAppointment) {
       if (appointment.pricing.depositPaid) {
-        const penaltyPercentage = business.bookingConfig.cancellationPolicy.penaltyPercentage || 100;
-        const penaltyAmount = (appointment.pricing.deposit * penaltyPercentage) / 100;
-        refundAmount = appointment.pricing.deposit - penaltyAmount;
-        penaltyApplied = true;
+        const policy = business.bookingConfig.cancellationPolicy;
+        let penaltyTotal = 0;
+
+        if (policy.penaltyType === 'percentage') {
+          penaltyTotal = (appointment.pricing.deposit * (policy.penaltyAmount || 100)) / 100;
+        } else if (policy.penaltyType === 'fixed') {
+          penaltyTotal = Math.min(policy.penaltyAmount || 0, appointment.pricing.deposit);
+        }
+        // penaltyType === 'none' → penaltyTotal stays 0
+
+        refundAmount = appointment.pricing.deposit - penaltyTotal;
+        penaltyApplied = penaltyTotal > 0;
       }
     } else {
       refundAmount = appointment.pricing.deposit;

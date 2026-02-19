@@ -62,7 +62,7 @@ export const NewSaleScreen: React.FC = () => {
   const services = servicesData?.data?.data?.services || [];
 
   const createSaleMutation = useMutation({
-    mutationFn: (data: any) => financesApi.quickSale(data),
+    mutationFn: (data: any) => data._useQuickSale ? financesApi.quickSale(data) : financesApi.createSale(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finances-summary'] });
       queryClient.invalidateQueries({ queryKey: ['finances-transactions'] });
@@ -137,17 +137,31 @@ export const NewSaleScreen: React.FC = () => {
         {
           text: 'Confirmar',
           onPress: () => {
-            createSaleMutation.mutate({
-              items: items.map((i) => ({
-                name: i.name,
-                price: i.price,
-                quantity: i.quantity,
-              })),
-              total: subtotal,
-              paymentMethod,
-              clientName: clientName.trim() || undefined,
-              notes: notes.trim() || undefined,
-            });
+            const hasCustomItems = items.some((i) => i.id.startsWith('custom_'));
+
+            if (hasCustomItems) {
+              // Use quick-sale for custom/ad-hoc items
+              const description = items.map((i) => `${i.name} x${i.quantity}`).join(', ');
+              createSaleMutation.mutate({
+                _useQuickSale: true,
+                amount: subtotal,
+                description,
+                paymentMethod,
+              });
+            } else {
+              // Use full sale for catalog services
+              createSaleMutation.mutate({
+                items: items.map((i) => ({
+                  type: 'service' as const,
+                  itemId: i.id,
+                  quantity: i.quantity,
+                  price: i.price,
+                })),
+                paymentMethod,
+                clientInfo: clientName.trim() ? { name: clientName.trim() } : undefined,
+                notes: notes.trim() || undefined,
+              });
+            }
           },
         },
       ],

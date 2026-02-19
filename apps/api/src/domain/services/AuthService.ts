@@ -379,6 +379,10 @@ class AuthService {
       throw new UnauthorizedError('Account is not active');
     }
 
+    if (!user.password) {
+      throw new UnauthorizedError('Please login with your social account');
+    }
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       throw new UnauthorizedError('Invalid credentials');
