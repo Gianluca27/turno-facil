@@ -46,6 +46,8 @@ export interface IBusinessUser extends Document {
   businesses: IBusinessAssociation[];
   preferences: IBusinessUserPreferences;
   refreshTokens: IRefreshToken[];
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   status: 'active' | 'suspended' | 'deleted';
   createdAt: Date;
   updatedAt: Date;
@@ -202,6 +204,8 @@ const businessUserSchema = new Schema<IBusinessUser, IBusinessUserModel>(
       default: 'active',
       index: true,
     },
+    passwordResetToken: String,
+    passwordResetExpires: Date,
     lastLoginAt: Date,
   },
   {

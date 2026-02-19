@@ -18,6 +18,8 @@ import { CreateStaffScreen } from '../../features/staff/screens/CreateStaffScree
 import { EditStaffScreen } from '../../features/staff/screens/EditStaffScreen';
 import { StaffScheduleScreen } from '../../features/staff/screens/StaffScheduleScreen';
 import { FinancesScreen } from '../../features/finances/screens/FinancesScreen';
+import { NewSaleScreen } from '../../features/finances/screens/NewSaleScreen';
+import { CollectPaymentScreen } from '../../features/finances/screens/CollectPaymentScreen';
 import { MarketingScreen } from '../../features/marketing/screens/MarketingScreen';
 import { AnalyticsScreen } from '../../features/analytics/screens/AnalyticsScreen';
 import { ReviewsScreen } from '../../features/reviews/screens/ReviewsScreen';
@@ -253,6 +255,18 @@ export const RootNavigator: React.FC = () => {
             name="ClientDetail"
             component={ClientDetailScreen}
             options={{ ...screenOptions, title: 'Cliente' }}
+          />
+
+          {/* Finance POS Screens */}
+          <Stack.Screen
+            name="NewSale"
+            component={NewSaleScreen}
+            options={{ ...screenOptions, title: 'Nueva Venta' }}
+          />
+          <Stack.Screen
+            name="CollectPayment"
+            component={CollectPaymentScreen}
+            options={{ ...screenOptions, title: 'Cobrar Turno' }}
           />
         </>
       )}

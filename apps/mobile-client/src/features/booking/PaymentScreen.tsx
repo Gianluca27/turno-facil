@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList } from '../../navigation/types';
 import { bookingApi, userApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<BookingStackParamList, 'Payment'>;
 type RouteProps = RouteProp<BookingStackParamList, 'Payment'>;
@@ -25,6 +26,7 @@ export default function PaymentScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { appointmentId } = route.params;
+  const { pricing: bookingPricing } = useBookingStore();
 
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [paymentType, setPaymentType] = useState<'now' | 'later'>('now');
@@ -274,7 +276,7 @@ export default function PaymentScreen() {
         >
           {paymentType === 'later'
             ? 'Confirmar reserva'
-            : `Pagar $${paymentInfo?.total?.toLocaleString() || '0'}`}
+            : `Pagar seña $${(paymentInfo?.depositAmount || bookingPricing.deposit || 0).toLocaleString()}`}
         </Button>
       </View>
     </SafeAreaView>

@@ -8,7 +8,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList } from '../../navigation/types';
-import { businessApi, bookingApi, promotionsApi } from '../../services/api';
+import { bookingApi, promotionsApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<BookingStackParamList, 'BookingConfirmation'>;
 type RouteProps = RouteProp<BookingStackParamList, 'BookingConfirmation'>;
@@ -22,34 +23,23 @@ export default function BookingConfirmationScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { businessId, serviceIds, staffId, date, startTime } = route.params;
+  const bookingStore = useBookingStore();
 
-  const [notes, setNotes] = useState('');
-  const [discountCode, setDiscountCode] = useState('');
-  const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [notes, setNotes] = useState(bookingStore.notes);
+  const [discountCode, setDiscountCode] = useState(bookingStore.discountCode);
+  const [appliedDiscount, setAppliedDiscount] = useState<number>(bookingStore.discountAmount);
   const [isValidatingCode, setIsValidatingCode] = useState(false);
 
-  // Fetch business
-  const { data: businessData } = useQuery({
-    queryKey: ['business', businessId],
-    queryFn: () => businessApi.getById(businessId),
-  });
+  // Read from bookingStore (already populated by previous screens)
+  const business = bookingStore.business;
+  const selectedServices = bookingStore.services;
+  const selectedStaff = bookingStore.staff;
+  const noStaffPreference = bookingStore.noStaffPreference;
+  const totalDuration = bookingStore.totalDuration();
 
-  // Fetch services
-  const { data: servicesData } = useQuery({
-    queryKey: ['business-services', businessId],
-    queryFn: () => businessApi.getServices(businessId),
-  });
-
-  // Fetch staff
-  const { data: staffData } = useQuery({
-    queryKey: ['business-staff', businessId],
-    queryFn: () => businessApi.getStaff(businessId),
-    enabled: !!staffId,
-  });
-
-  // Calculate price
+  // Calculate price from backend
   const { data: priceData, isLoading: isLoadingPrice } = useQuery({
-    queryKey: ['booking-price', businessId, serviceIds, discountCode],
+    queryKey: ['booking-price', businessId, serviceIds, appliedDiscount > 0 ? discountCode : ''],
     queryFn: () =>
       bookingApi.calculatePrice({
         businessId,
@@ -58,19 +48,25 @@ export default function BookingConfirmationScreen() {
       }),
   });
 
-  const business = businessData?.data?.data?.business;
-  const allServices = servicesData?.data?.data?.services || [];
-  const selectedServices = allServices.filter((s: any) => serviceIds.includes(s._id));
-  const allStaff = staffData?.data?.data?.staff || [];
-  const selectedStaff = staffId ? allStaff.find((s: any) => s._id === staffId) : null;
-
   const pricing = priceData?.data?.data || {
-    subtotal: selectedServices.reduce((sum: number, s: any) => sum + s.price, 0),
+    subtotal: selectedServices.reduce((sum, s) => sum + s.price, 0),
     discount: appliedDiscount,
-    total: selectedServices.reduce((sum: number, s: any) => sum + s.price, 0) - appliedDiscount,
+    total: selectedServices.reduce((sum, s) => sum + s.price, 0) - appliedDiscount,
+    deposit: 0,
   };
 
-  const totalDuration = selectedServices.reduce((sum: number, s: any) => sum + s.duration, 0);
+  // Update store pricing when we get backend data
+  React.useEffect(() => {
+    if (priceData?.data?.data) {
+      const p = priceData.data.data;
+      bookingStore.setPricing({
+        subtotal: p.subtotal,
+        discount: p.discount || 0,
+        total: p.total,
+        deposit: p.deposit || 0,
+      });
+    }
+  }, [priceData, bookingStore]);
 
   // Booking mutation
   const bookingMutation = useMutation({
@@ -78,7 +74,7 @@ export default function BookingConfirmationScreen() {
       bookingApi.create({
         businessId,
         serviceIds,
-        staffId: staffId || '',
+        ...(staffId ? { staffId } : {}),
         date,
         startTime,
         notes: notes || undefined,
@@ -86,7 +82,18 @@ export default function BookingConfirmationScreen() {
       }),
     onSuccess: (response) => {
       const appointmentId = response.data?.data?.appointment?._id;
-      navigation.navigate('BookingSuccess', { appointmentId });
+      const requiresDeposit = response.data?.data?.requiresDeposit;
+
+      bookingStore.setNotes(notes);
+      bookingStore.setAppointmentId(appointmentId);
+
+      if (requiresDeposit) {
+        // Route to payment screen for deposit
+        navigation.navigate('Payment', { appointmentId });
+      } else {
+        // Skip payment, go directly to success
+        navigation.navigate('BookingSuccess', { appointmentId });
+      }
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || 'Error al crear la reserva';
@@ -99,25 +106,37 @@ export default function BookingConfirmationScreen() {
 
     setIsValidatingCode(true);
     try {
+      const subtotal = selectedServices.reduce((sum, s) => sum + s.price, 0);
       const response = await promotionsApi.validateCode({
         code: discountCode,
         businessId,
         serviceIds,
+        subtotal,
       });
 
       if (response.data?.data?.valid) {
-        setAppliedDiscount(response.data.data.discount || 0);
+        const discount = response.data.data.discount || response.data.data.discountAmount || 0;
+        setAppliedDiscount(discount);
+        bookingStore.setDiscount(discountCode, discount);
         Alert.alert('Código aplicado', 'El descuento fue aplicado correctamente');
       } else {
         Alert.alert('Código inválido', 'El código ingresado no es válido o no aplica');
         setAppliedDiscount(0);
+        bookingStore.clearDiscount();
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'No se pudo validar el código');
       setAppliedDiscount(0);
+      bookingStore.clearDiscount();
     } finally {
       setIsValidatingCode(false);
     }
+  };
+
+  const handleRemoveCode = () => {
+    setDiscountCode('');
+    setAppliedDiscount(0);
+    bookingStore.clearDiscount();
   };
 
   const formatDate = () => {
@@ -128,10 +147,10 @@ export default function BookingConfirmationScreen() {
     return `${dayName} ${day} de ${month}`;
   };
 
-  const staffName = selectedStaff
-    ? selectedStaff.profile?.displayName ||
-      `${selectedStaff.profile?.firstName} ${selectedStaff.profile?.lastName}`
-    : 'Sin preferencia';
+  const staffName = noStaffPreference
+    ? 'Sin preferencia'
+    : selectedStaff?.displayName ||
+      (selectedStaff ? `${selectedStaff.firstName} ${selectedStaff.lastName}` : 'Sin preferencia');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -153,9 +172,17 @@ export default function BookingConfirmationScreen() {
           <View style={styles.infoRow}>
             <Icon name="map-marker-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.infoText}>
-              {business?.location?.address}, {business?.location?.city}
+              {business?.address}, {business?.city}
             </Text>
           </View>
+          {business?.requireConfirmation && (
+            <View style={styles.confirmationBadge}>
+              <Icon name="clock-outline" size={14} color={colors.warning} />
+              <Text style={styles.confirmationText}>
+                Sujeto a confirmación del negocio
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Date & Time */}
@@ -176,7 +203,7 @@ export default function BookingConfirmationScreen() {
         {/* Services */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Servicios seleccionados</Text>
-          {selectedServices.map((service: any) => (
+          {selectedServices.map((service) => (
             <View key={service._id} style={styles.serviceItem}>
               <View style={styles.serviceInfo}>
                 <Text style={styles.serviceName}>{service.name}</Text>
@@ -198,14 +225,52 @@ export default function BookingConfirmationScreen() {
           <View style={styles.staffContainer}>
             <View style={styles.staffAvatar}>
               <Icon
-                name={selectedStaff ? 'account' : 'account-group'}
+                name={noStaffPreference ? 'account-group' : 'account'}
                 size={24}
                 color={colors.white}
               />
             </View>
-            <Text style={styles.staffName}>{staffName}</Text>
+            <View>
+              <Text style={styles.staffName}>{staffName}</Text>
+              {noStaffPreference && (
+                <Text style={styles.staffNote}>
+                  Se asignará el primer profesional disponible
+                </Text>
+              )}
+            </View>
           </View>
         </View>
+
+        {/* Cancellation Policy */}
+        {business?.cancellationPolicy && (
+          <View style={styles.policyCard}>
+            <View style={styles.policyHeader}>
+              <Icon name="shield-check-outline" size={20} color={colors.primary} />
+              <Text style={styles.policyTitle}>Política de cancelación</Text>
+            </View>
+            {business.cancellationPolicy.allowCancellation ? (
+              <>
+                <Text style={styles.policyText}>
+                  Cancelación gratuita hasta{' '}
+                  <Text style={styles.policyHighlight}>
+                    {business.cancellationPolicy.freeCancellationHours} horas
+                  </Text>{' '}
+                  antes del turno.
+                </Text>
+                {business.cancellationPolicy.penaltyPercentage > 0 && (
+                  <Text style={styles.policyWarning}>
+                    Cancelaciones tardías tienen un cargo del{' '}
+                    {business.cancellationPolicy.penaltyPercentage}% sobre la seña.
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={styles.policyWarning}>
+                Este negocio no permite cancelaciones. Asegurate de poder asistir.
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Discount Code */}
         <View style={styles.card}>
@@ -219,10 +284,11 @@ export default function BookingConfirmationScreen() {
               style={styles.discountInput}
               outlineStyle={styles.discountInputOutline}
               disabled={appliedDiscount > 0}
+              autoCapitalize="characters"
             />
             <Button
               mode={appliedDiscount > 0 ? 'outlined' : 'contained'}
-              onPress={appliedDiscount > 0 ? () => { setDiscountCode(''); setAppliedDiscount(0); } : handleValidateCode}
+              onPress={appliedDiscount > 0 ? handleRemoveCode : handleValidateCode}
               loading={isValidatingCode}
               disabled={isValidatingCode || (!discountCode.trim() && !appliedDiscount)}
               style={styles.discountButton}
@@ -257,21 +323,39 @@ export default function BookingConfirmationScreen() {
 
         {/* Pricing Summary */}
         <View style={styles.pricingCard}>
-          <View style={styles.pricingRow}>
-            <Text style={styles.pricingLabel}>Subtotal</Text>
-            <Text style={styles.pricingValue}>${pricing.subtotal?.toLocaleString()}</Text>
-          </View>
-          {pricing.discount > 0 && (
-            <View style={styles.pricingRow}>
-              <Text style={styles.discountLabel}>Descuento</Text>
-              <Text style={styles.discountValue}>-${pricing.discount?.toLocaleString()}</Text>
+          {isLoadingPrice ? (
+            <View style={styles.pricingLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.pricingLoadingText}>Calculando precio...</Text>
             </View>
+          ) : (
+            <>
+              <View style={styles.pricingRow}>
+                <Text style={styles.pricingLabel}>Subtotal</Text>
+                <Text style={styles.pricingValue}>${pricing.subtotal?.toLocaleString()}</Text>
+              </View>
+              {pricing.discount > 0 && (
+                <View style={styles.pricingRow}>
+                  <Text style={styles.discountLabel}>Descuento</Text>
+                  <Text style={styles.discountValue}>-${pricing.discount?.toLocaleString()}</Text>
+                </View>
+              )}
+              <Divider style={styles.pricingDivider} />
+              <View style={styles.pricingRow}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValue}>${pricing.total?.toLocaleString()}</Text>
+              </View>
+              {pricing.deposit > 0 && (
+                <View style={styles.depositRow}>
+                  <View style={styles.depositInfo}>
+                    <Icon name="information-outline" size={16} color={colors.primary} />
+                    <Text style={styles.depositLabel}>Seña requerida</Text>
+                  </View>
+                  <Text style={styles.depositValue}>${pricing.deposit?.toLocaleString()}</Text>
+                </View>
+              )}
+            </>
           )}
-          <Divider style={styles.pricingDivider} />
-          <View style={styles.pricingRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${pricing.total?.toLocaleString()}</Text>
-          </View>
         </View>
 
         <View style={{ height: 120 }} />
@@ -283,12 +367,14 @@ export default function BookingConfirmationScreen() {
           mode="contained"
           onPress={() => bookingMutation.mutate()}
           loading={bookingMutation.isPending}
-          disabled={bookingMutation.isPending}
+          disabled={bookingMutation.isPending || isLoadingPrice}
           style={styles.confirmButton}
           contentStyle={styles.confirmButtonContent}
           labelStyle={styles.confirmButtonLabel}
         >
-          Confirmar reserva
+          {pricing.deposit > 0
+            ? `Reservar y pagar seña $${pricing.deposit?.toLocaleString()}`
+            : 'Confirmar reserva'}
         </Button>
       </View>
     </SafeAreaView>
@@ -353,6 +439,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 8,
     flex: 1,
+  },
+  confirmationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 6,
+  },
+  confirmationText: {
+    fontSize: 13,
+    color: colors.warning,
+    fontWeight: '500',
   },
   sectionTitle: {
     fontSize: 14,
@@ -434,6 +534,47 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.text,
   },
+  staffNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  // Cancellation policy
+  policyCard: {
+    backgroundColor: colors.primaryLight + '12',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.primaryLight + '30',
+  },
+  policyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  policyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  policyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  policyHighlight: {
+    fontWeight: '600',
+    color: colors.text,
+  },
+  policyWarning: {
+    fontSize: 13,
+    color: colors.warning,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  // Discount
   discountContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -461,17 +602,30 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontWeight: '500',
   },
+  // Notes
   notesInput: {
     backgroundColor: colors.white,
   },
   notesInputOutline: {
     borderRadius: 8,
   },
+  // Pricing
   pricingCard: {
     backgroundColor: colors.white,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+  },
+  pricingLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 10,
+  },
+  pricingLoadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   pricingRow: {
     flexDirection: 'row',
@@ -508,6 +662,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
+  depositRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  depositInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  depositLabel: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  depositValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  // Bottom bar
   bottomBar: {
     position: 'absolute',
     bottom: 0,

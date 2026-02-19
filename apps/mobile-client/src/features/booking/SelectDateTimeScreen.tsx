@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList } from '../../navigation/types';
 import { businessApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<BookingStackParamList, 'SelectDateTime'>;
 type RouteProps = RouteProp<BookingStackParamList, 'SelectDateTime'>;
@@ -23,10 +24,16 @@ export default function SelectDateTimeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { businessId, serviceIds, staffId } = route.params;
+  const bookingStore = useBookingStore();
 
   const today = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState<string>(today);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Restore from store if navigating back
+  const [selectedDate, setSelectedDate] = useState<string>(
+    () => bookingStore.date || today
+  );
+  const [selectedTime, setSelectedTime] = useState<string | null>(
+    () => bookingStore.startTime
+  );
 
   // Fetch availability
   const { data, isLoading, isFetching } = useQuery({
@@ -86,6 +93,9 @@ export default function SelectDateTimeScreen() {
 
   const handleContinue = () => {
     if (!selectedTime) return;
+
+    // Persist date/time to store
+    bookingStore.setDateTime(selectedDate, selectedTime);
 
     navigation.navigate('BookingConfirmation', {
       businessId,

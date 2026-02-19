@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList, RootStackParamList } from '../../navigation/types';
 import { bookingApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<BookingStackParamList, 'BookingSuccess'>;
@@ -22,6 +23,14 @@ export default function BookingSuccessScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { appointmentId } = route.params;
+  const resetBooking = useBookingStore((s) => s.reset);
+
+  // Clean up booking store on mount (flow completed)
+  useEffect(() => {
+    return () => {
+      resetBooking();
+    };
+  }, [resetBooking]);
 
   // Fetch appointment details
   const { data } = useQuery({
