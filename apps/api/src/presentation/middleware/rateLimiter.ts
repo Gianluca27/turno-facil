@@ -9,8 +9,8 @@ const createRedisStore = () => {
   try {
     const redisClient = getRedisClient();
     return new RedisStore({
-      // @ts-expect-error - Types mismatch between ioredis and rate-limit-redis
-      sendCommand: (...args: string[]) => redisClient.call(...args),
+      sendCommand: (...args: string[]) =>
+        (redisClient as any).call(...args) as Promise<number>,
       prefix: 'rl:',
     });
   } catch {

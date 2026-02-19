@@ -30,9 +30,16 @@ export interface RefreshTokenPayload {
   jti: string;
 }
 
+type UserType = 'user' | 'business_user';
+
 class AuthService {
+  // Resolve the correct Mongoose model for a given user type
+  private getModel(userType: UserType): typeof User | typeof BusinessUser {
+    return userType === 'user' ? User : BusinessUser;
+  }
+
   // Generate access token
-  private generateAccessToken(userId: string, userType: 'user' | 'business_user'): string {
+  private generateAccessToken(userId: string, userType: UserType): string {
     const jti = uuidv4();
     const payload = {
       sub: userId,
@@ -74,12 +81,14 @@ class AuthService {
   }
 
   // Generate token pair
-  async generateTokens(userId: string, userType: 'user' | 'business_user', device?: string): Promise<TokenPair> {
+  async generateTokens(userId: string, userType: UserType, device?: string): Promise<TokenPair> {
     const accessToken = this.generateAccessToken(userId, userType);
     const { token: refreshToken, expiresAt } = this.generateRefreshToken(userId);
 
+    const Model = this.getModel(userType);
+
     // Save refresh token to user document
-    const updateData = {
+    await Model.findByIdAndUpdate(userId, {
       $push: {
         refreshTokens: {
           token: refreshToken,
@@ -88,30 +97,17 @@ class AuthService {
         },
       },
       lastLoginAt: new Date(),
-    };
+    });
 
-    if (userType === 'user') {
-      await User.findByIdAndUpdate(userId, updateData);
-      // Clean up old refresh tokens (keep max 5)
-      await User.findByIdAndUpdate(userId, {
-        $push: {
-          refreshTokens: {
-            $each: [],
-            $slice: -5,
-          },
+    // Clean up old refresh tokens (keep max 5)
+    await Model.findByIdAndUpdate(userId, {
+      $push: {
+        refreshTokens: {
+          $each: [],
+          $slice: -5,
         },
-      });
-    } else {
-      await BusinessUser.findByIdAndUpdate(userId, updateData);
-      await BusinessUser.findByIdAndUpdate(userId, {
-        $push: {
-          refreshTokens: {
-            $each: [],
-            $slice: -5,
-          },
-        },
-      });
-    }
+      },
+    });
 
     return {
       accessToken,
@@ -133,21 +129,18 @@ class AuthService {
         throw new UnauthorizedError('Invalid token type');
       }
 
-      // Try to find user with this refresh token
-      let user: IUser | IBusinessUser | null = await User.findOne({
+      // Try to find user with this refresh token across both models
+      const tokenQuery = {
         _id: payload.sub,
         'refreshTokens.token': refreshToken,
         status: 'active',
-      });
+      };
 
-      let userType: 'user' | 'business_user' = 'user';
+      let user: IUser | IBusinessUser | null = await User.findOne(tokenQuery);
+      let userType: UserType = 'user';
 
       if (!user) {
-        user = await BusinessUser.findOne({
-          _id: payload.sub,
-          'refreshTokens.token': refreshToken,
-          status: 'active',
-        });
+        user = await BusinessUser.findOne(tokenQuery);
         userType = 'business_user';
       }
 
@@ -159,36 +152,22 @@ class AuthService {
       }
 
       // Remove old refresh token and add new one
+      const Model = this.getModel(userType);
       const accessToken = this.generateAccessToken(payload.sub, userType);
       const { token: newRefreshToken, expiresAt } = this.generateRefreshToken(payload.sub, payload.family);
 
-      if (userType === 'user') {
-        await User.findByIdAndUpdate(payload.sub, {
-          $pull: { refreshTokens: { token: refreshToken } },
-        });
-        await User.findByIdAndUpdate(payload.sub, {
-          $push: {
-            refreshTokens: {
-              token: newRefreshToken,
-              device,
-              expiresAt,
-            },
+      await Model.findByIdAndUpdate(payload.sub, {
+        $pull: { refreshTokens: { token: refreshToken } },
+      });
+      await Model.findByIdAndUpdate(payload.sub, {
+        $push: {
+          refreshTokens: {
+            token: newRefreshToken,
+            device,
+            expiresAt,
           },
-        });
-      } else {
-        await BusinessUser.findByIdAndUpdate(payload.sub, {
-          $pull: { refreshTokens: { token: refreshToken } },
-        });
-        await BusinessUser.findByIdAndUpdate(payload.sub, {
-          $push: {
-            refreshTokens: {
-              token: newRefreshToken,
-              device,
-              expiresAt,
-            },
-          },
-        });
-      }
+        },
+      });
 
       return {
         accessToken,
@@ -229,25 +208,15 @@ class AuthService {
   }
 
   // Logout
-  async logout(userId: string, refreshToken?: string, userType: 'user' | 'business_user' = 'user'): Promise<void> {
+  async logout(userId: string, refreshToken?: string, userType: UserType = 'user'): Promise<void> {
+    const Model = this.getModel(userType);
+
     if (refreshToken) {
-      // Remove specific refresh token
-      if (userType === 'user') {
-        await User.findByIdAndUpdate(userId, {
-          $pull: { refreshTokens: { token: refreshToken } },
-        });
-      } else {
-        await BusinessUser.findByIdAndUpdate(userId, {
-          $pull: { refreshTokens: { token: refreshToken } },
-        });
-      }
+      await Model.findByIdAndUpdate(userId, {
+        $pull: { refreshTokens: { token: refreshToken } },
+      });
     } else {
-      // Remove all refresh tokens
-      if (userType === 'user') {
-        await User.findByIdAndUpdate(userId, { refreshTokens: [] });
-      } else {
-        await BusinessUser.findByIdAndUpdate(userId, { refreshTokens: [] });
-      }
+      await Model.findByIdAndUpdate(userId, { refreshTokens: [] });
     }
   }
 
@@ -475,14 +444,9 @@ class AuthService {
   }
 
   // Change password
-  async changePassword(userId: string, currentPassword: string, newPassword: string, userType: 'user' | 'business_user'): Promise<void> {
-    let user: IUser | IBusinessUser | null;
-
-    if (userType === 'user') {
-      user = await User.findById(userId).select('+password');
-    } else {
-      user = await BusinessUser.findById(userId).select('+password');
-    }
+  async changePassword(userId: string, currentPassword: string, newPassword: string, userType: UserType): Promise<void> {
+    const Model = this.getModel(userType);
+    const user = await Model.findById(userId).select('+password');
 
     if (!user) {
       throw new BadRequestError('User not found');
@@ -501,11 +465,7 @@ class AuthService {
     await user.save();
 
     // Revoke all existing refresh tokens
-    if (userType === 'user') {
-      await User.findByIdAndUpdate(userId, { refreshTokens: [] });
-    } else {
-      await BusinessUser.findByIdAndUpdate(userId, { refreshTokens: [] });
-    }
+    await Model.findByIdAndUpdate(userId, { refreshTokens: [] });
 
     logger.info('Password changed', { userId });
   }

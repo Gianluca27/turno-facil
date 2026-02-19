@@ -1,9 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { authService } from '../../domain/services/AuthService.js';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler.js';
 import { authRateLimiter, passwordResetRateLimiter } from '../middleware/rateLimiter.js';
 import { authenticateBusinessUser, BusinessAuthenticatedRequest } from '../middleware/auth.js';
+import { BusinessUser } from '../../infrastructure/database/mongodb/models/BusinessUser.js';
+import { sendGridService } from '../../infrastructure/external/sendgrid/index.js';
+import { logger } from '../../utils/logger.js';
+import config from '../../config/index.js';
 
 const router = Router();
 
@@ -26,6 +31,15 @@ const loginSchema = z.object({
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 const changePasswordSchema = z.object({
@@ -126,14 +140,44 @@ router.post(
   '/forgot-password',
   passwordResetRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { email } = req.body;
+    const data = forgotPasswordSchema.parse(req.body);
 
-    if (!email) {
-      throw new BadRequestError('Email is required');
+    const user = await BusinessUser.findOne({ email: data.email.toLowerCase() });
+
+    if (user && user.status === 'active') {
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenHash = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+      // Save token to user (expires in 1 hour)
+      user.passwordResetToken = resetTokenHash;
+      user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+
+      // Create reset link
+      const resetLink = `${config.app.corsOrigins[0] || 'https://business.turnofacil.com'}/reset-password?token=${resetToken}`;
+
+      // Send reset email
+      const emailResult = await sendGridService.sendPasswordReset(user.email, {
+        userName: user.profile.firstName,
+        resetLink,
+        expiresIn: '1 hora',
+      });
+
+      if (!emailResult.success) {
+        logger.error('Failed to send business password reset email', {
+          userId: user._id,
+          error: emailResult.error,
+        });
+      } else {
+        logger.info('Business password reset email sent', { userId: user._id });
+      }
     }
 
-    // TODO: Implement password reset email
-
+    // Always return success to prevent email enumeration
     res.json({
       success: true,
       message: 'If an account exists with this email, a password reset link will be sent',
@@ -145,18 +189,41 @@ router.post(
 router.post(
   '/reset-password',
   authRateLimiter,
-  asyncHandler(async (req: Request, _res: Response) => {
-    const { token, password } = req.body;
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = resetPasswordSchema.parse(req.body);
 
-    if (!token || !password) {
-      throw new BadRequestError('Token and password are required');
+    // Hash the provided token
+    const resetTokenHash = crypto
+      .createHash('sha256')
+      .update(data.token)
+      .digest('hex');
+
+    // Find user with valid token
+    const user = await BusinessUser.findOne({
+      passwordResetToken: resetTokenHash,
+      passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new BadRequestError('Invalid or expired reset token');
     }
 
-    if (password.length < 8) {
-      throw new BadRequestError('Password must be at least 8 characters');
-    }
+    // Update password
+    user.password = data.password;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
 
-    throw new BadRequestError('Password reset not yet implemented');
+    // Revoke all refresh tokens for security
+    user.refreshTokens = [];
+
+    await user.save();
+
+    logger.info('Business password reset successful', { userId: user._id });
+
+    res.json({
+      success: true,
+      message: 'Password has been reset successfully. Please login with your new password.',
+    });
   })
 );
 
