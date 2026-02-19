@@ -1,6 +1,5 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
@@ -22,7 +21,7 @@ const config: Config = {
     ],
   },
   moduleNameMapper: {
-    // Strip .js extension from imports (ESM → CJS)
+    // Strip .js extension from imports (ESM -> CJS)
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
@@ -33,8 +32,5 @@ const config: Config = {
     '!src/index.ts',
     '!src/**/__tests__/**',
   ],
-  setupFilesAfterSetup: [],
   testTimeout: 30000,
 };
-
-export default config;
