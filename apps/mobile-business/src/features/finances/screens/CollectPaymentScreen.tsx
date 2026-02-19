@@ -93,7 +93,8 @@ export const CollectPaymentScreen: React.FC = () => {
   }, [appointments, searchQuery]);
 
   const checkoutMutation = useMutation({
-    mutationFn: (data: any) => financesApi.checkout(data),
+    mutationFn: (data: { appointmentId: string; paymentMethod: string; tip: number }) =>
+      financesApi.checkout(data.appointmentId, { paymentMethod: data.paymentMethod, tip: data.tip }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finances-summary'] });
       queryClient.invalidateQueries({ queryKey: ['finances-transactions'] });

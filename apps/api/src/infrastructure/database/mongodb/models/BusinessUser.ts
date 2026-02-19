@@ -233,7 +233,7 @@ businessUserSchema.virtual('fullName').get(function (this: IBusinessUser) {
 
 // Pre-save middleware to hash password
 businessUserSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password) {
     return next();
   }
 

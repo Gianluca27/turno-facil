@@ -41,6 +41,19 @@ const rescheduleSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+const checkAvailabilitySchema = z.object({
+  businessId: z.string().min(1),
+  serviceIds: z.array(z.string()).min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  staffId: z.string().min(1).optional(),
+});
+
+const calculatePriceSchema = z.object({
+  businessId: z.string().min(1),
+  serviceIds: z.array(z.string()).min(1),
+  discountCode: z.string().optional(),
+});
+
 // POST /api/v1/bookings - Create new booking
 router.post(
   '/',
@@ -181,7 +194,7 @@ router.post(
 
     const business = appointment.businessId as unknown as typeof Business.prototype;
 
-    if (!business?.bookingConfig?.allowRescheduling) {
+    if (!business?.bookingConfig?.cancellationPolicy?.allowCancellation) {
       throw new BadRequestError('Rescheduling is not allowed for this business');
     }
 
@@ -198,7 +211,7 @@ router.post(
     const newEndDateTime = new Date(`${data.date}T${newEndTime}:00`);
 
     const now = new Date();
-    const minAdvanceDate = new Date(now.getTime() + (business.bookingConfig?.minAdvanceMinutes || 60) * 60 * 1000);
+    const minAdvanceDate = new Date(now.getTime() + (business.bookingConfig?.minAdvance || 1) * 60 * 60 * 1000);
     if (newStartDateTime < minAdvanceDate) {
       throw new BadRequestError('New time must be at least the minimum advance time from now');
     }
@@ -335,7 +348,8 @@ router.post(
 router.post(
   '/check-availability',
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = await checkAvailability(req.body);
+    const data = checkAvailabilitySchema.parse(req.body);
+    const result = await checkAvailability(data);
 
     res.json({
       success: true,
@@ -348,10 +362,11 @@ router.post(
 router.post(
   '/calculate-price',
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const data = calculatePriceSchema.parse(req.body);
     const result = await calculatePrice({
-      businessId: req.body.businessId,
-      serviceIds: req.body.serviceIds,
-      discountCode: req.body.discountCode,
+      businessId: data.businessId,
+      serviceIds: data.serviceIds,
+      discountCode: data.discountCode,
       userId: req.user!.id,
     });
 
