@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList } from '../../navigation/types';
 import { businessApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<BookingStackParamList, 'SelectStaff'>;
 type RouteProps = RouteProp<BookingStackParamList, 'SelectStaff'>;
@@ -34,8 +35,12 @@ export default function SelectStaffScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { businessId, serviceIds } = route.params;
+  const bookingStore = useBookingStore();
 
-  const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
+  // Restore selection from store if navigating back
+  const [selectedStaff, setSelectedStaff] = useState<string | null>(
+    () => bookingStore.staff?._id ?? null
+  );
 
   // Fetch staff
   const { data, isLoading } = useQuery({
@@ -51,6 +56,25 @@ export default function SelectStaffScreen() {
   );
 
   const handleContinue = () => {
+    // Persist staff selection to store
+    if (selectedStaff) {
+      const member = availableStaff.find((s) => s._id === selectedStaff);
+      if (member) {
+        bookingStore.setStaff({
+          _id: member._id,
+          firstName: member.profile.firstName,
+          lastName: member.profile.lastName,
+          displayName: member.profile.displayName,
+          avatar: member.profile.avatar,
+          specialties: member.profile.specialties,
+          averageRating: member.stats?.averageRating,
+          totalReviews: member.stats?.totalReviews,
+        });
+      }
+    } else {
+      bookingStore.setStaff(null);
+    }
+
     navigation.navigate('SelectDateTime', {
       businessId,
       serviceIds,

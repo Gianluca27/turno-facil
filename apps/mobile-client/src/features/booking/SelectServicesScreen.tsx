@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../shared/theme';
 import { BookingStackParamList } from '../../navigation/types';
 import { businessApi } from '../../services/api';
+import { useBookingStore } from '../../shared/stores/bookingStore';
 
 type NavigationProp = NativeStackNavigationProp<BookingStackParamList, 'SelectServices'>;
 type RouteProps = RouteProp<BookingStackParamList, 'SelectServices'>;
@@ -32,10 +33,51 @@ export default function SelectServicesScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { businessId } = route.params;
+  const bookingStore = useBookingStore();
 
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  // Restore selections from store if navigating back
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    () => bookingStore.services.map((s) => s._id)
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Reset store when starting a fresh booking flow
+  React.useEffect(() => {
+    const currentBusiness = useBookingStore.getState().business;
+    if (currentBusiness && currentBusiness._id !== businessId) {
+      bookingStore.reset();
+      setSelectedServices([]);
+    }
+  }, [businessId, bookingStore]);
+
+  // Fetch business details and cache in store
+  const { data: businessData } = useQuery({
+    queryKey: ['business', businessId],
+    queryFn: () => businessApi.getById(businessId),
+  });
+
+  React.useEffect(() => {
+    const business = businessData?.data?.data?.business;
+    if (business && !bookingStore.business) {
+      bookingStore.setBusiness({
+        _id: business._id,
+        name: business.name,
+        address: business.location?.address || '',
+        city: business.location?.city || '',
+        coverImage: business.media?.cover,
+        requiresDeposit: business.bookingConfig?.requireDeposit || false,
+        depositAmount: business.bookingConfig?.depositAmount || 0,
+        depositType: business.bookingConfig?.depositType || 'percentage',
+        cancellationPolicy: {
+          allowCancellation: business.bookingConfig?.cancellationPolicy?.allowCancellation ?? true,
+          freeCancellationHours: business.bookingConfig?.cancellationPolicy?.hoursBeforeAppointment ?? 24,
+          penaltyPercentage: business.bookingConfig?.cancellationPolicy?.penaltyPercentage ?? 0,
+        },
+        requireConfirmation: business.bookingConfig?.requireConfirmation || false,
+      });
+    }
+  }, [businessData, bookingStore]);
 
   // Fetch services
   const { data, isLoading } = useQuery({
@@ -67,6 +109,20 @@ export default function SelectServicesScreen() {
   };
 
   const handleContinue = () => {
+    // Persist selected services to store with full details
+    const selectedServiceObjects = services.filter((s) => selectedServices.includes(s._id));
+    bookingStore.setServices(
+      selectedServiceObjects.map((s) => ({
+        _id: s._id,
+        name: s.name,
+        duration: s.duration,
+        price: s.price,
+        description: s.description,
+        image: s.image,
+        categoryId: s.categoryId,
+      }))
+    );
+
     navigation.navigate('SelectStaff', {
       businessId,
       serviceIds: selectedServices,

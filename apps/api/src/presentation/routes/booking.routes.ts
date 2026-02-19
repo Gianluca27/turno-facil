@@ -22,7 +22,7 @@ router.use(authenticateUser);
 // Validation schemas
 const createBookingSchema = z.object({
   businessId: z.string().min(1),
-  staffId: z.string().min(1),
+  staffId: z.string().min(1).optional(),
   serviceIds: z.array(z.string()).min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
@@ -69,22 +69,70 @@ router.post(
       throw new BadRequestError('One or more services not found or not available');
     }
 
-    // Get staff
-    const staff = await Staff.findOne({
-      _id: data.staffId,
-      businessId: data.businessId,
-      status: 'active',
-    });
+    // Get or auto-assign staff
+    let staff;
 
-    if (!staff) {
-      throw new NotFoundError('Staff not found');
-    }
+    if (data.staffId) {
+      // Client selected a specific staff member
+      staff = await Staff.findOne({
+        _id: data.staffId,
+        businessId: data.businessId,
+        status: 'active',
+      });
 
-    // Verify staff offers all selected services
-    const staffServiceIds = staff.services.map((s) => s.toString());
-    for (const serviceId of data.serviceIds) {
-      if (!staffServiceIds.includes(serviceId)) {
-        throw new BadRequestError('Staff does not offer one or more selected services');
+      if (!staff) {
+        throw new NotFoundError('Staff not found');
+      }
+
+      // Verify staff offers all selected services
+      const staffServiceIds = staff.services.map((s) => s.toString());
+      for (const serviceId of data.serviceIds) {
+        if (!staffServiceIds.includes(serviceId)) {
+          throw new BadRequestError('Staff does not offer one or more selected services');
+        }
+      }
+    } else {
+      // Auto-assign: find the first available staff member who offers all selected services
+      const candidateStaff = await Staff.find({
+        businessId: data.businessId,
+        status: 'active',
+        services: { $all: data.serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      });
+
+      if (candidateStaff.length === 0) {
+        throw new BadRequestError('No staff available for the selected services');
+      }
+
+      // Calculate time window for conflict check
+      const svcDuration = services.reduce((sum, s) => sum + s.duration, 0);
+      const bufferTime = business.bookingConfig.bufferTime || 0;
+      const totalDur = svcDuration + bufferTime;
+      const sMinutes = timeToMinutes(data.startTime);
+      const eMinutes = sMinutes + svcDuration;
+      const eTime = minutesToTime(eMinutes);
+      const sdt = new Date(`${data.date}T${data.startTime}:00`);
+      const edt = new Date(`${data.date}T${eTime}:00`);
+
+      // Find the first staff member without conflicts
+      for (const candidate of candidateStaff) {
+        const conflict = await Appointment.findOne({
+          businessId: data.businessId,
+          staffId: candidate._id,
+          date: new Date(data.date),
+          status: { $in: ['pending', 'confirmed', 'checked_in', 'in_progress'] },
+          $or: [
+            { startDateTime: { $lt: edt }, endDateTime: { $gt: sdt } },
+          ],
+        });
+
+        if (!conflict) {
+          staff = candidate;
+          break;
+        }
+      }
+
+      if (!staff) {
+        throw new ConflictError('No staff available at the selected time');
       }
     }
 
@@ -136,7 +184,7 @@ router.post(
     // Verify availability
     const conflictingAppointment = await Appointment.findOne({
       businessId: data.businessId,
-      staffId: data.staffId,
+      staffId: staff._id,
       date: appointmentDate,
       status: { $in: ['pending', 'confirmed', 'checked_in', 'in_progress'] },
       $or: [
@@ -197,7 +245,7 @@ router.post(
         phone: user.phone || '',
         email: user.email,
       },
-      staffId: data.staffId,
+      staffId: staff._id,
       staffInfo: {
         name: `${staff.profile.firstName} ${staff.profile.lastName}`,
       },

@@ -214,12 +214,12 @@ export const bookingApi = {
   create: (data: {
     businessId: string;
     serviceIds: string[];
-    staffId: string;
+    staffId?: string;
     date: string;
     startTime: string;
     notes?: string;
     discountCode?: string;
-  }) => api.post<ApiResponse<{ appointment: any }>>('/bookings', data),
+  }) => api.post<ApiResponse<{ appointment: any; requiresDeposit?: boolean; depositAmount?: number }>>('/bookings', data),
 
   getById: (bookingId: string) =>
     api.get<ApiResponse<{ appointment: any }>>(`/bookings/${bookingId}`),
@@ -348,8 +348,8 @@ export const promotionsApi = {
   getAvailable: (params?: { businessId?: string }) =>
     api.get<ApiResponse<{ promotions: any[] }>>('/promotions', { params }),
 
-  validateCode: (data: { code: string; businessId: string; serviceIds?: string[] }) =>
-    api.post<ApiResponse<{ valid: boolean; promotion?: any; discount?: number }>>('/promotions/validate', data),
+  validateCode: (data: { code: string; businessId: string; serviceIds?: string[]; subtotal?: number }) =>
+    api.post<ApiResponse<{ valid: boolean; promotion?: any; discount?: number; discountAmount?: number }>>('/promotions/validate', data),
 };
 
 // ============================================================================
