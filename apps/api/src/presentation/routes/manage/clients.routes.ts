@@ -1,8 +1,15 @@
 import { Router, Response } from 'express';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { asyncHandler, NotFoundError } from '../../middleware/errorHandler.js';
-import { ClientBusinessRelation } from '../../../infrastructure/database/mongodb/models/ClientBusinessRelation.js';
-import { Appointment } from '../../../infrastructure/database/mongodb/models/Appointment.js';
+import { asyncHandler } from '../../middleware/errorHandler.js';
+import {
+  listClients,
+  getClientProfile,
+  getClientAppointments,
+  updateClientInfo,
+  blockClient,
+  unblockClient,
+  toggleVip,
+} from '../../../application/use-cases/clients/index.js';
 
 const router = Router();
 
@@ -11,39 +18,14 @@ router.get(
   '/',
   requirePermission('clients:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const businessId = req.currentBusiness!.businessId;
-    const { q: _searchQuery, segment, page = '1', limit = '20' } = req.query;
-
-    const query: any = { businessId };
-
-    if (segment === 'vip') query['clientInfo.tags'] = 'VIP';
-    if (segment === 'blocked') query.isBlocked = true;
-    if (segment === 'inactive') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      query['stats.lastVisit'] = { $lt: thirtyDaysAgo };
-    }
-
-    const pageNum = parseInt(page as string);
-    const limitNum = Math.min(parseInt(limit as string), 50);
-    const skip = (pageNum - 1) * limitNum;
-
-    const [clients, total] = await Promise.all([
-      ClientBusinessRelation.find(query)
-        .populate('clientId', 'profile email phone')
-        .sort({ 'stats.lastVisit': -1 })
-        .skip(skip)
-        .limit(limitNum),
-      ClientBusinessRelation.countDocuments(query),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        clients,
-        pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
-      },
+    const { segment, page = '1', limit = '20' } = req.query;
+    const result = await listClients({
+      businessId: req.currentBusiness!.businessId,
+      segment: segment as string | undefined,
+      page: parseInt(page as string),
+      limit: Math.min(parseInt(limit as string), 50),
     });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -52,14 +34,11 @@ router.get(
   '/:id',
   requirePermission('clients:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const client = await ClientBusinessRelation.findOne({
-      _id: req.params.id,
+    const result = await getClientProfile({
+      clientRelationId: req.params.id,
       businessId: req.currentBusiness!.businessId,
-    }).populate('clientId', 'profile email phone');
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    res.json({ success: true, data: { client } });
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -69,16 +48,15 @@ router.put(
   requirePermission('clients:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { tags, notes, allergies, preferences } = req.body;
-
-    const client = await ClientBusinessRelation.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $set: { 'clientInfo.tags': tags, 'clientInfo.notes': notes, 'clientInfo.allergies': allergies, 'clientInfo.preferences': preferences } },
-      { new: true }
-    );
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    res.json({ success: true, data: { client } });
+    const result = await updateClientInfo({
+      clientRelationId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      tags,
+      notes,
+      allergies,
+      preferences,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -87,22 +65,11 @@ router.get(
   '/:id/appointments',
   requirePermission('clients:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const client = await ClientBusinessRelation.findOne({
-      _id: req.params.id,
+    const result = await getClientAppointments({
+      clientRelationId: req.params.id,
       businessId: req.currentBusiness!.businessId,
     });
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    const appointments = await Appointment.find({
-      businessId: req.currentBusiness!.businessId,
-      clientId: client.clientId,
-    })
-      .populate('staffId', 'profile')
-      .sort({ startDateTime: -1 })
-      .limit(50);
-
-    res.json({ success: true, data: { appointments } });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -112,16 +79,12 @@ router.post(
   requirePermission('clients:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { reason } = req.body;
-
-    const client = await ClientBusinessRelation.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { isBlocked: true, blockedAt: new Date(), blockedReason: reason },
-      { new: true }
-    );
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    res.json({ success: true, data: { client } });
+    const result = await blockClient({
+      clientRelationId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      reason,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -130,15 +93,11 @@ router.post(
   '/:id/unblock',
   requirePermission('clients:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const client = await ClientBusinessRelation.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { isBlocked: false, blockedAt: null, blockedReason: null },
-      { new: true }
-    );
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    res.json({ success: true, data: { client } });
+    const result = await unblockClient({
+      clientRelationId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -147,21 +106,11 @@ router.post(
   '/:id/vip',
   requirePermission('clients:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const client = await ClientBusinessRelation.findOne({
-      _id: req.params.id,
+    const result = await toggleVip({
+      clientRelationId: req.params.id,
       businessId: req.currentBusiness!.businessId,
     });
-
-    if (!client) throw new NotFoundError('Client not found');
-
-    const hasVip = client.clientInfo.tags.includes('VIP');
-    const update = hasVip
-      ? { $pull: { 'clientInfo.tags': 'VIP' } }
-      : { $addToSet: { 'clientInfo.tags': 'VIP' } };
-
-    const updated = await ClientBusinessRelation.findByIdAndUpdate(req.params.id, update, { new: true });
-
-    res.json({ success: true, data: { client: updated, isVip: !hasVip } });
+    res.json({ success: true, data: result });
   })
 );
 
