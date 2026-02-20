@@ -1,10 +1,17 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { asyncHandler, NotFoundError } from '../../middleware/errorHandler.js';
-import { Service } from '../../../infrastructure/database/mongodb/models/Service.js';
-import { Business } from '../../../infrastructure/database/mongodb/models/Business.js';
-import { Staff } from '../../../infrastructure/database/mongodb/models/Staff.js';
+import { asyncHandler } from '../../middleware/errorHandler.js';
+import {
+  createService,
+  updateService,
+  deleteService,
+  listServices,
+  getService,
+  updateServiceStatus,
+  listCategories,
+  createCategory,
+} from '../../../application/use-cases/services/index.js';
 
 const router = Router();
 
@@ -12,7 +19,7 @@ const serviceSchema = z.object({
   name: z.string().min(2).max(100),
   description: z.string().max(500).optional(),
   categoryId: z.string().optional(),
-  category: z.string().optional(), // For backward compatibility
+  category: z.string().optional(),
   duration: z.number().min(5).max(480),
   price: z.number().min(0),
   config: z.object({
@@ -23,7 +30,7 @@ const serviceSchema = z.object({
     allowOnlineBooking: z.boolean().default(true),
   }).optional(),
   image: z.string().optional(),
-  staffIds: z.array(z.string()).optional(), // Staff to assign this service to
+  staffIds: z.array(z.string()).optional(),
 });
 
 // GET /api/v1/manage/services - List services
@@ -31,12 +38,8 @@ router.get(
   '/',
   requirePermission('services:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const services = await Service.find({
-      businessId: req.currentBusiness!.businessId,
-      status: { $ne: 'deleted' },
-    }).sort({ order: 1, name: 1 });
-
-    res.json({ success: true, data: { services } });
+    const result = await listServices({ businessId: req.currentBusiness!.businessId });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -45,26 +48,9 @@ router.post(
   '/',
   requirePermission('services:create'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const { staffIds, ...serviceData } = serviceSchema.parse(req.body);
-    const businessId = req.currentBusiness!.businessId;
-
-    const service = new Service({
-      ...serviceData,
-      businessId,
-      status: 'active',
-    });
-
-    await service.save();
-
-    // If staffIds provided, assign this service to those staff members
-    if (staffIds && staffIds.length > 0) {
-      await Staff.updateMany(
-        { _id: { $in: staffIds }, businessId },
-        { $addToSet: { services: service._id } }
-      );
-    }
-
-    res.status(201).json({ success: true, data: { service } });
+    const data = serviceSchema.parse(req.body);
+    const result = await createService({ ...data, businessId: req.currentBusiness!.businessId });
+    res.status(201).json({ success: true, data: result });
   })
 );
 
@@ -73,14 +59,8 @@ router.get(
   '/:id',
   requirePermission('services:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const service = await Service.findOne({
-      _id: req.params.id,
-      businessId: req.currentBusiness!.businessId,
-    });
-
-    if (!service) throw new NotFoundError('Service not found');
-
-    res.json({ success: true, data: { service } });
+    const result = await getService({ serviceId: req.params.id, businessId: req.currentBusiness!.businessId });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -90,16 +70,8 @@ router.put(
   requirePermission('services:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const data = serviceSchema.partial().parse(req.body);
-
-    const service = await Service.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $set: data },
-      { new: true, runValidators: true }
-    );
-
-    if (!service) throw new NotFoundError('Service not found');
-
-    res.json({ success: true, data: { service } });
+    const result = await updateService({ serviceId: req.params.id, businessId: req.currentBusiness!.businessId, data });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -108,14 +80,7 @@ router.delete(
   '/:id',
   requirePermission('services:delete'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const service = await Service.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { status: 'deleted' },
-      { new: true }
-    );
-
-    if (!service) throw new NotFoundError('Service not found');
-
+    await deleteService({ serviceId: req.params.id, businessId: req.currentBusiness!.businessId });
     res.json({ success: true, message: 'Service deleted' });
   })
 );
@@ -125,21 +90,12 @@ router.put(
   '/:id/status',
   requirePermission('services:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const { status } = req.body;
-
-    if (!['active', 'inactive'].includes(status)) {
-      throw new NotFoundError('Invalid status');
-    }
-
-    const service = await Service.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { status },
-      { new: true }
-    );
-
-    if (!service) throw new NotFoundError('Service not found');
-
-    res.json({ success: true, data: { service } });
+    const result = await updateServiceStatus({
+      serviceId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      status: req.body.status,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -148,8 +104,8 @@ router.get(
   '-categories',
   requirePermission('services:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const business = await Business.findById(req.currentBusiness!.businessId).select('serviceCategories');
-    res.json({ success: true, data: { categories: business?.serviceCategories || [] } });
+    const result = await listCategories({ businessId: req.currentBusiness!.businessId });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -159,14 +115,8 @@ router.post(
   requirePermission('services:create'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { name, description } = req.body;
-
-    const business = await Business.findByIdAndUpdate(
-      req.currentBusiness!.businessId,
-      { $push: { serviceCategories: { name, description, order: 0, isActive: true } } },
-      { new: true }
-    );
-
-    res.json({ success: true, data: { categories: business?.serviceCategories } });
+    const result = await createCategory({ businessId: req.currentBusiness!.businessId, name, description });
+    res.json({ success: true, data: result });
   })
 );
 

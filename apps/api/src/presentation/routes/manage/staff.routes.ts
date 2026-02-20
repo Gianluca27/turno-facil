@@ -1,8 +1,17 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { requirePermission, BusinessAuthenticatedRequest } from '../../middleware/auth.js';
-import { asyncHandler, NotFoundError } from '../../middleware/errorHandler.js';
-import { Staff } from '../../../infrastructure/database/mongodb/models/Staff.js';
+import { asyncHandler } from '../../middleware/errorHandler.js';
+import {
+  createStaff,
+  updateStaff,
+  deleteStaff,
+  listStaff,
+  getStaff,
+  updateSchedule,
+  addException,
+  assignServices,
+} from '../../../application/use-cases/staff/index.js';
 
 const router = Router();
 
@@ -26,14 +35,8 @@ router.get(
   '/',
   requirePermission('staff:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const staff = await Staff.find({
-      businessId: req.currentBusiness!.businessId,
-      status: { $ne: 'deleted' },
-    })
-      .populate('services', 'name')
-      .sort({ order: 1, 'profile.firstName': 1 });
-
-    res.json({ success: true, data: { staff } });
+    const result = await listStaff({ businessId: req.currentBusiness!.businessId });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -43,17 +46,8 @@ router.post(
   requirePermission('staff:create'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const data = staffSchema.parse(req.body);
-
-    const staff = new Staff({
-      ...data,
-      businessId: req.currentBusiness!.businessId,
-      schedule: { useBusinessSchedule: true, custom: [] },
-      status: 'active',
-    });
-
-    await staff.save();
-
-    res.status(201).json({ success: true, data: { staff } });
+    const result = await createStaff({ ...data, businessId: req.currentBusiness!.businessId });
+    res.status(201).json({ success: true, data: result });
   })
 );
 
@@ -62,14 +56,8 @@ router.get(
   '/:id',
   requirePermission('staff:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const staff = await Staff.findOne({
-      _id: req.params.id,
-      businessId: req.currentBusiness!.businessId,
-    }).populate('services', 'name duration price');
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
-    res.json({ success: true, data: { staff } });
+    const result = await getStaff({ staffId: req.params.id, businessId: req.currentBusiness!.businessId });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -79,16 +67,8 @@ router.put(
   requirePermission('staff:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const data = staffSchema.partial().parse(req.body);
-
-    const staff = await Staff.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $set: data },
-      { new: true }
-    );
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
-    res.json({ success: true, data: { staff } });
+    const result = await updateStaff({ staffId: req.params.id, businessId: req.currentBusiness!.businessId, data });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -97,14 +77,7 @@ router.delete(
   '/:id',
   requirePermission('staff:delete'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const staff = await Staff.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { status: 'deleted' },
-      { new: true }
-    );
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
+    await deleteStaff({ staffId: req.params.id, businessId: req.currentBusiness!.businessId });
     res.json({ success: true, message: 'Staff member deleted' });
   })
 );
@@ -115,16 +88,13 @@ router.put(
   requirePermission('staff:schedule'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { useBusinessSchedule, custom } = req.body;
-
-    const staff = await Staff.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $set: { schedule: { useBusinessSchedule, custom: custom || [] } } },
-      { new: true }
-    );
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
-    res.json({ success: true, data: { staff } });
+    const result = await updateSchedule({
+      staffId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      useBusinessSchedule,
+      custom,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -134,16 +104,15 @@ router.post(
   requirePermission('staff:schedule'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { startDate, endDate, type, reason } = req.body;
-
-    const staff = await Staff.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $push: { exceptions: { startDate: new Date(startDate), endDate: new Date(endDate), type, reason, isRecurring: false } } },
-      { new: true }
-    );
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
-    res.json({ success: true, data: { staff } });
+    const result = await addException({
+      staffId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      startDate,
+      endDate,
+      type,
+      reason,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
@@ -153,16 +122,12 @@ router.put(
   requirePermission('staff:update'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
     const { serviceIds } = req.body;
-
-    const staff = await Staff.findOneAndUpdate(
-      { _id: req.params.id, businessId: req.currentBusiness!.businessId },
-      { $set: { services: serviceIds } },
-      { new: true }
-    ).populate('services', 'name');
-
-    if (!staff) throw new NotFoundError('Staff member not found');
-
-    res.json({ success: true, data: { staff } });
+    const result = await assignServices({
+      staffId: req.params.id,
+      businessId: req.currentBusiness!.businessId,
+      serviceIds,
+    });
+    res.json({ success: true, data: result });
   })
 );
 
