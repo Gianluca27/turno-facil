@@ -123,11 +123,10 @@ router.post('/cash-register/movement', requirePermission('pos:write'),
 
 router.get('/cash-register/history', requirePermission('pos:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const { startDate, endDate, page = '1', limit = '20' } = req.query as Record<string, string>;
+    const { startDate, endDate, page, limit } = req.query as Record<string, string>;
     const result = await getCashRegisterHistory({
       businessId: req.currentBusiness!.businessId,
-      startDate, endDate,
-      page: parseInt(page, 10), limit: Math.min(parseInt(limit, 10), 50),
+      startDate, endDate, page, limit,
     });
     res.json({ success: true, data: result });
   })
@@ -163,11 +162,10 @@ router.post('/sales', requirePermission('pos:write'),
 
 router.get('/sales', requirePermission('pos:read'),
   asyncHandler(async (req: BusinessAuthenticatedRequest, res: Response) => {
-    const { startDate, endDate, paymentMethod, source, page = '1', limit = '20' } = req.query as Record<string, string>;
+    const { startDate, endDate, paymentMethod, source, page, limit } = req.query as Record<string, string>;
     const result = await listSales({
       businessId: req.currentBusiness!.businessId,
-      startDate, endDate, paymentMethod, source,
-      page: parseInt(page, 10), limit: Math.min(parseInt(limit, 10), 50),
+      startDate, endDate, paymentMethod, source, page, limit,
     });
     res.json({ success: true, data: result });
   })
