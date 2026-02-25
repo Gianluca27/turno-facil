@@ -549,4 +549,4 @@ businessSchema.statics.findNearby = function (
   }).limit(50);
 };
 
-export const Business = mongoose.model<IBusiness, IBusinessModel>('Business', businessSchema);
+export const Business = (mongoose.models.Business as IBusinessModel) || mongoose.model<IBusiness, IBusinessModel>('Business', businessSchema);

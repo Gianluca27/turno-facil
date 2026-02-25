@@ -111,7 +111,7 @@ export const EditServiceScreen: React.FC = () => {
       setIsActive(service.isActive);
       setRequiresDeposit(service.requiresDeposit);
       setDepositAmount(service.depositAmount?.toString() || '');
-      setMaxConcurrentBookings(service.maxConcurrentBookings.toString());
+      setMaxConcurrentBookings(service.maxConcurrentBookings?.toString() || '1');
       setSelectedStaff(service.staffIds);
       setIsInitialized(true);
     }

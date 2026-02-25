@@ -288,7 +288,7 @@ businessUserSchema.statics.findByEmail = function (email: string): Promise<IBusi
   return this.findOne({ email: email.toLowerCase(), status: 'active' });
 };
 
-export const BusinessUser = mongoose.model<IBusinessUser, IBusinessUserModel>(
+export const BusinessUser = (mongoose.models.BusinessUser as IBusinessUserModel) || mongoose.model<IBusinessUser, IBusinessUserModel>(
   'BusinessUser',
   businessUserSchema
 );

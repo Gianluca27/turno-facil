@@ -213,7 +213,7 @@ notificationSchema.statics.getUnreadCount = function (
   });
 };
 
-export const Notification = mongoose.model<INotification, INotificationModel>(
+export const Notification = (mongoose.models.Notification as INotificationModel) || mongoose.model<INotification, INotificationModel>(
   'Notification',
   notificationSchema
 );

@@ -67,4 +67,4 @@ waitlistSchema.statics.findActive = function (businessId: string): Promise<IWait
     .sort({ priority: -1, createdAt: 1 });
 };
 
-export const Waitlist = mongoose.model<IWaitlist, IWaitlistModel>('Waitlist', waitlistSchema);
+export const Waitlist = (mongoose.models.Waitlist as IWaitlistModel) || mongoose.model<IWaitlist, IWaitlistModel>('Waitlist', waitlistSchema);

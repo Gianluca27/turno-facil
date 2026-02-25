@@ -101,4 +101,4 @@ const campaignSchema = new Schema<ICampaign, ICampaignModel>(
 campaignSchema.index({ businessId: 1, status: 1 });
 campaignSchema.index({ 'schedule.sendAt': 1, status: 1 });
 
-export const Campaign = mongoose.model<ICampaign, ICampaignModel>('Campaign', campaignSchema);
+export const Campaign = (mongoose.models.Campaign as ICampaignModel) || mongoose.model<ICampaign, ICampaignModel>('Campaign', campaignSchema);

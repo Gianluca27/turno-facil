@@ -106,4 +106,4 @@ reviewSchema.statics.getAverageRating = async function (businessId: string): Pro
   return result[0]?.avgRating || 0;
 };
 
-export const Review = mongoose.model<IReview, IReviewModel>('Review', reviewSchema);
+export const Review = (mongoose.models.Review as IReviewModel) || mongoose.model<IReview, IReviewModel>('Review', reviewSchema);

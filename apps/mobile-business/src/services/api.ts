@@ -3,7 +3,7 @@ import { authStorage as storage } from '../shared/utils/storage';
 
 // Configuration
 // Use your local IP for development (run ipconfig to find it)
-const DEV_API_HOST = '192.168.100.2';
+const DEV_API_HOST = '192.168.68.119';
 const API_URL = __DEV__ ? `http://${DEV_API_HOST}:3000/api/v1` : 'https://api.turnofacil.com/api/v1';
 
 // Create axios instance

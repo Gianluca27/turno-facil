@@ -312,7 +312,7 @@ cashRegisterSchema.pre('save', function (next) {
   next();
 });
 
-export const CashRegister = mongoose.model<ICashRegister, ICashRegisterModel>(
+export const CashRegister = (mongoose.models.CashRegister as ICashRegisterModel) || mongoose.model<ICashRegister, ICashRegisterModel>(
   'CashRegister',
   cashRegisterSchema
 );

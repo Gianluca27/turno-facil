@@ -286,4 +286,4 @@ serviceSchema.statics.findByCategory = function (
   }).sort({ order: 1, name: 1 });
 };
 
-export const Service = mongoose.model<IService, IServiceModel>('Service', serviceSchema);
+export const Service = (mongoose.models.Service as IServiceModel) || mongoose.model<IService, IServiceModel>('Service', serviceSchema);

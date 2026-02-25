@@ -251,4 +251,4 @@ staffSchema.statics.findActiveByBusiness = function (
   }).sort({ order: 1, 'profile.firstName': 1 });
 };
 
-export const Staff = mongoose.model<IStaff, IStaffModel>('Staff', staffSchema);
+export const Staff = (mongoose.models.Staff as IStaffModel) || mongoose.model<IStaff, IStaffModel>('Staff', staffSchema);

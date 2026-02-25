@@ -630,4 +630,4 @@ transactionSchema.pre('save', function (next) {
   next();
 });
 
-export const Transaction = mongoose.model<ITransaction, ITransactionModel>('Transaction', transactionSchema);
+export const Transaction = (mongoose.models.Transaction as ITransactionModel) || mongoose.model<ITransaction, ITransactionModel>('Transaction', transactionSchema);

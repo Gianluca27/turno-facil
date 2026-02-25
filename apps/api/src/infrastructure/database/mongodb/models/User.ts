@@ -358,4 +358,4 @@ userSchema.statics.findByAuthProvider = function (
   });
 };
 
-export const User = mongoose.model<IUser, IUserModel>('User', userSchema);
+export const User = (mongoose.models.User as IUserModel) || mongoose.model<IUser, IUserModel>('User', userSchema);

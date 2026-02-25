@@ -360,4 +360,4 @@ productSchema.pre('save', function (next) {
   next();
 });
 
-export const Product = mongoose.model<IProduct, IProductModel>('Product', productSchema);
+export const Product = (mongoose.models.Product as IProductModel) || mongoose.model<IProduct, IProductModel>('Product', productSchema);

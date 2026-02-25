@@ -457,7 +457,7 @@ appointmentSchema.statics.findUpcoming = function (
     .limit(limit);
 };
 
-export const Appointment = mongoose.model<IAppointment, IAppointmentModel>(
+export const Appointment = (mongoose.models.Appointment as IAppointmentModel) || mongoose.model<IAppointment, IAppointmentModel>(
   'Appointment',
   appointmentSchema
 );

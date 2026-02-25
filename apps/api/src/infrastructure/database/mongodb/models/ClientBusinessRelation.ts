@@ -89,4 +89,4 @@ clientBusinessRelationSchema.index({ businessId: 1, 'stats.lastVisit': -1 });
 clientBusinessRelationSchema.index({ businessId: 1, 'loyalty.tier': 1 });
 clientBusinessRelationSchema.index({ businessId: 1, isBlocked: 1 });
 
-export const ClientBusinessRelation = mongoose.model<IClientBusinessRelation>('ClientBusinessRelation', clientBusinessRelationSchema);
+export const ClientBusinessRelation = (mongoose.models.ClientBusinessRelation as mongoose.Model<IClientBusinessRelation>) || mongoose.model<IClientBusinessRelation>('ClientBusinessRelation', clientBusinessRelationSchema);

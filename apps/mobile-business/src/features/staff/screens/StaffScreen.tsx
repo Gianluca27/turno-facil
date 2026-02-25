@@ -101,7 +101,8 @@ export const StaffScreen: React.FC = () => {
     }
   };
 
-  const getWorkingDays = (schedule: StaffSchedule[]) => {
+  const getWorkingDays = (schedule?: StaffSchedule[]) => {
+    if (!Array.isArray(schedule)) return '';
     return schedule
       .filter((s) => s.isWorking)
       .map((s) => DAYS_OF_WEEK[s.dayOfWeek])
@@ -156,17 +157,17 @@ export const StaffScreen: React.FC = () => {
               <View style={styles.statItem}>
                 <Icon name="calendar-check" size={14} color={colors.textSecondary} />
                 <Text variant="labelSmall" style={styles.statText}>
-                  {member.stats.completedAppointments} turnos
+                  {member.stats?.completedAppointments ?? 0} turnos
                 </Text>
               </View>
-              {member.stats.averageRating && (
+              {member.stats?.averageRating != null && member.stats.averageRating > 0 ? (
                 <View style={styles.statItem}>
                   <Icon name="star" size={14} color="#F59E0B" />
                   <Text variant="labelSmall" style={styles.statText}>
                     {member.stats.averageRating.toFixed(1)} ({member.stats.totalReviews})
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
             {member.services.length > 0 && (

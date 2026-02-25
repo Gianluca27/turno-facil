@@ -87,4 +87,4 @@ promotionSchema.statics.findByCode = function (businessId: string, code: string)
   return this.findOne({ businessId, code: code.toUpperCase(), status: 'active', validFrom: { $lte: now }, validUntil: { $gte: now } });
 };
 
-export const Promotion = mongoose.model<IPromotion, IPromotionModel>('Promotion', promotionSchema);
+export const Promotion = (mongoose.models.Promotion as IPromotionModel) || mongoose.model<IPromotion, IPromotionModel>('Promotion', promotionSchema);
